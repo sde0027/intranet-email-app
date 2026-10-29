@@ -7,7 +7,7 @@ CREATE TABLE users(
     name TEXT NOT NULL,
     email TEXT NOT NULL COLLATE NOCASE UNIQUE,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'EMPLOYEE',
+    role TEXT NOT NULL DEFAULT 'EMPLOYEE'
     CHECK(role IN ('ADMIN','EMPLOYEE')),
     is_active INTEGER NOT NULL DEFAULT 1 
     CHECK(is_active IN (0,1)),
@@ -21,7 +21,6 @@ sender_id INTEGER NOT NULL,
 subject TEXT NOT NULL DEFAULT '',
 body TEXT NOT NULL DEFAULT '',
 status TEXT NOT NULL DEFAULT 'DRAFT'
-
 CHECK (status IN ('DRAFT', 'SENT')),
 parent_email_id INTEGER,
 created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
