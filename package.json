@@ -13,8 +13,11 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "argon2": "^0.45.1",
     "better-sqlite3": "^13.0.3",
+    "better-sqlite3-session-store": "^0.1.0",
     "express": "^5.3.0",
+    "express-session": "^1.19.0",
     "tailwindcss": "^4.3.3"
   }
 }
