@@ -8,6 +8,7 @@ import { SQLiteSessionStore } from "./middleware/sqlite-session-store.js";
 // Route imports
 import authRoutes from "./modules/auth/auth.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
+import emailsRoutes from "./modules/emails/emails.routes.js";
 
 // Auth imports
 import { authenticate } from "./middleware/authenticate.js";
@@ -41,6 +42,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(sessionMiddleware);
 app.use("/api/auth", authRoutes);
 app.use("/api/employees", authenticate, authorize("ADMIN"), usersRoutes);
+app.use("/api/emails", emailsRoutes);
 
 app.get("/api/health", (req, res) => {
   try {
