@@ -67,3 +67,23 @@ export async function createEmployee(input = {}) {
     throw error;
   }
 }
+
+export function getAllEmployees() {
+  return db
+    .prepare(
+      `
+    SELECT
+      id,
+      name,
+      email,
+      role,
+      is_active,
+      created_at
+    FROM users
+    ORDER BY name COLLATE NOCASE ASC
+  `,
+    )
+    .all();
+}
+
+

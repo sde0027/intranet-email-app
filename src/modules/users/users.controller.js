@@ -1,4 +1,5 @@
 import { createEmployee } from "./users.service.js";
+import { getAllEmployees } from "./users.service.js";
 
 export async function createEmployeeController(req, res, next) {
   try {
@@ -15,6 +16,19 @@ export async function createEmployeeController(req, res, next) {
       });
     }
 
+    next(error);
+  }
+}
+
+export function getAllEmployeesController(req, res, next) {
+  try {
+    const employees = getAllEmployees();
+
+    res.status(200).json({
+      count: employees.length,
+      employees,
+    });
+  } catch (error) {
     next(error);
   }
 }
