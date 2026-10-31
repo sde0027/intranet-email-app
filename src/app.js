@@ -34,14 +34,6 @@ app.use(express.urlencoded({ extended: false }));
 app.use(sessionMiddleware);
 app.use("/api/auth", authRoutes);
 
-app.get("/api/test/admin", authenticate, authorize("ADMIN"), (req, res) => {
-  res.status(200).json({ message: "Admin access granted." });
-});
-
-app.get("/api/test/protected", authenticate, (req, res) => {
-  res.json({ message: "You are authenticated." });
-});
-
 app.get("/api/health", (req, res) => {
   try {
     const result = db.prepare("SELECT 1 AS connected").get();
