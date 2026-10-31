@@ -1,9 +1,22 @@
 import argon2 from "argon2";
 import { db } from "../../database/connection.js";
 
-export async function createEmployee({ name, email, password }) {
-  const cleanName = name?.trim();
-  const cleanEmail = email?.trim().toLowerCase();
+export async function createEmployee(input = {}) {
+  const { name, email, password } = input ?? {};
+
+  // Validate data types and required fields.
+  if (
+    typeof name !== "string" ||
+    typeof email !== "string" ||
+    typeof password !== "string"
+  ) {
+    const error = new Error("Name, email, and password are required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const cleanName = name.trim();
+  const cleanEmail = email.trim().toLowerCase();
 
   if (!cleanName || !cleanEmail || !password) {
     const error = new Error("Name, email, and password are required.");
@@ -29,19 +42,19 @@ export async function createEmployee({ name, email, password }) {
     const result = db
       .prepare(
         `
-            INSERT INTO users (name, email, password_hash)
-            VALUES (?, ?, ?)
-        `,
+      INSERT INTO users (name, email, password_hash)
+      VALUES (?, ?, ?)
+    `,
       )
       .run(cleanName, cleanEmail, passwordHash);
 
     return db
       .prepare(
         `
-            SELECT id, name, email, role, is_active, created_at
-            FROM users
-            WHERE id = ?
-        `,
+      SELECT id, name, email, role, is_active, created_at
+      FROM users
+      WHERE id = ?
+    `,
       )
       .get(result.lastInsertRowid);
   } catch (error) {
