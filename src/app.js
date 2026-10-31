@@ -5,7 +5,7 @@ import session from "express-session";
 import { SQLiteSessionStore } from "./middleware/sqlite-session-store.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import { authenticate } from "./middleware/authenticate.js";
-
+import { authorize } from "./middleware/authorize.js";
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET is missing from .env");
 }
@@ -33,6 +33,10 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false }));
 app.use(sessionMiddleware);
 app.use("/api/auth", authRoutes);
+
+app.get("/api/test/admin", authenticate, authorize("ADMIN"), (req, res) => {
+  res.status(200).json({ message: "Admin access granted." });
+});
 
 app.get("/api/test/protected", authenticate, (req, res) => {
   res.json({ message: "You are authenticated." });
