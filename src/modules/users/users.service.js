@@ -86,4 +86,44 @@ export function getAllEmployees() {
     .all();
 }
 
+export function updateEmployeeStatus(id, isActive) {
+  const employeeId = Number(id);
 
+  if (!Number.isSafeInteger(employeeId) || employeeId <= 0) {
+    const error = new Error("Invalid employee ID.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (typeof isActive !== "boolean") {
+    const error = new Error("is_active must be a boolean.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const result = db
+    .prepare(
+      `
+    UPDATE users
+    SET is_active = ?
+    WHERE id = ?
+  `,
+    )
+    .run(isActive ? 1 : 0, employeeId);
+
+  if (result.changes === 0) {
+    const error = new Error("Employee not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return db
+    .prepare(
+      `
+    SELECT id, name, email, role, is_active, created_at
+    FROM users
+    WHERE id = ?
+  `,
+    )
+    .get(employeeId);
+}

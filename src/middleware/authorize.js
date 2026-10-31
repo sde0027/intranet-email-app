@@ -1,6 +1,6 @@
 export function authorize(...allowedRoles) {
   return (req, res, next) => {
-    const user = req.session?.user;
+    const user = req.user;
 
     if (!user?.id) {
       return res.status(401).json({
