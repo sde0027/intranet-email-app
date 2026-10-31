@@ -159,3 +159,67 @@ export function sendEmailService({
 
   return sendTransaction();
 }
+
+export function getInboxService({ userId, page, limit }) {
+  const offset = (page - 1) * limit;
+
+  // Retrieve the total number of inbox messages.
+  const countInbox = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM email_recipients er
+    INNER JOIN emails e
+      ON e.id = er.email_id
+    WHERE er.recipient_id = ?
+      AND er.is_deleted = 0
+      AND e.status = 'SENT'
+  `);
+
+  // Retrieve the current page of inbox messages.
+  const getInbox = db.prepare(`
+    SELECT
+      e.id,
+      e.subject,
+      e.body,
+      e.sent_at,
+
+      sender.id AS sender_id,
+      sender.name AS sender_name,
+      sender.email AS sender_email,
+
+      er.recipient_type,
+      er.is_read
+
+    FROM email_recipients er
+
+    INNER JOIN emails e
+      ON e.id = er.email_id
+
+    INNER JOIN users sender
+      ON sender.id = e.sender_id
+
+    WHERE er.recipient_id = ?
+      AND er.is_deleted = 0
+      AND e.status = 'SENT'
+
+    ORDER BY e.sent_at DESC, e.id DESC
+
+    LIMIT ? OFFSET ?
+  `);
+
+  const total = countInbox.get(userId).total;
+
+  const messages = getInbox.all(userId, limit, offset);
+
+  return {
+    messages,
+
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total,
+      hasPreviousPage: page > 1,
+    },
+  };
+}
