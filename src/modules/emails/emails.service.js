@@ -505,3 +505,55 @@ export function deleteDraftService({ senderId, draftId }) {
 
   return true;
 }
+
+// Mark an email as read or unread for a specific recipient.
+export function markEmailReadService({ emailId, recipientId, isRead }) {
+  const updateReadStatus = db.prepare(`
+    UPDATE email_recipients
+    SET is_read = ?
+    WHERE email_id = ?
+      AND recipient_id = ?
+      AND is_deleted = 0
+      AND EXISTS (
+        SELECT 1
+        FROM emails
+        WHERE emails.id = email_recipients.email_id
+          AND emails.status = 'SENT'
+      )
+  `);
+
+  const result = updateReadStatus.run(isRead, emailId, recipientId);
+
+  if (result.changes === 0) {
+    throw new EmailServiceError(
+      "Email not found in your inbox.",
+      404,
+      "EMAIL_NOT_FOUND",
+    );
+  }
+
+  return {
+    id: emailId,
+    is_read: isRead,
+  };
+}
+
+// Retrieve the unread message count for the current recipient.
+export function getUnreadCountService({ recipientId }) {
+  const getCount = db.prepare(`
+    SELECT COUNT(*) AS unread_count
+    FROM email_recipients er
+    INNER JOIN emails e
+      ON e.id = er.email_id
+    WHERE er.recipient_id = ?
+      AND er.is_read = 0
+      AND er.is_deleted = 0
+      AND e.status = 'SENT'
+  `);
+
+  const result = getCount.get(recipientId);
+
+  return {
+    unreadCount: result.unread_count,
+  };
+}

@@ -7,6 +7,8 @@ import {
   getDraftService,
   updateDraftService,
   deleteDraftService,
+  markEmailReadService,
+  getUnreadCountService,
   EmailServiceError,
 } from "./emails.service.js";
 
@@ -329,5 +331,75 @@ export function deleteDraft(req, res) {
     });
   } catch (error) {
     return handleDraftError(error, res, "Delete draft");
+  }
+}
+
+function parseEmailId(value) {
+  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
+    return null;
+  }
+
+  const id = Number(value);
+
+  return Number.isSafeInteger(id) ? id : null;
+}
+
+function updateReadStatus(req, res, isRead) {
+  try {
+    const emailId = parseEmailId(req.params.id);
+
+    if (emailId === null) {
+      return res.status(400).json({
+        error: "Invalid email ID.",
+      });
+    }
+
+    const result = markEmailReadService({
+      emailId,
+      recipientId: req.user.id,
+      isRead,
+    });
+
+    return res.status(200).json({
+      message: isRead ? "Email marked as read." : "Email marked as unread.",
+      email: result,
+    });
+  } catch (error) {
+    if (error instanceof EmailServiceError) {
+      return res.status(error.status).json({
+        error: error.message,
+        code: error.code,
+      });
+    }
+
+    console.error("Read status update failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to update email read status.",
+    });
+  }
+}
+
+export function markAsRead(req, res) {
+  return updateReadStatus(req, res, 1);
+}
+
+export function markAsUnread(req, res) {
+  return updateReadStatus(req, res, 0);
+}
+
+export function getUnreadCount(req, res) {
+  try {
+    const result = getUnreadCountService({
+      recipientId: req.user.id,
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Unread count retrieval failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to retrieve unread count.",
+    });
   }
 }
