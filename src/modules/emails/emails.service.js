@@ -340,3 +340,168 @@ export function getSentService({ userId, page, limit }) {
     },
   };
 }
+
+// Shared query for retrieving a draft owned by a specific employee.
+const findDraft = db.prepare(`
+  SELECT
+    id,
+    sender_id,
+    subject,
+    body,
+    status,
+    created_at
+  FROM emails
+  WHERE id = ?
+    AND sender_id = ?
+    AND status = 'DRAFT'
+`);
+
+// Create a new draft.
+export function createDraftService({ senderId, subject = "", body = "" }) {
+  if (typeof subject !== "string" || typeof body !== "string") {
+    throw new EmailServiceError(
+      "Subject and body must be strings.",
+      400,
+      "INVALID_DRAFT",
+    );
+  }
+
+  const insertDraft = db.prepare(`
+    INSERT INTO emails (
+      sender_id,
+      subject,
+      body,
+      status
+    )
+    VALUES (?, ?, ?, 'DRAFT')
+  `);
+
+  const result = insertDraft.run(senderId, subject, body);
+
+  return findDraft.get(Number(result.lastInsertRowid), senderId);
+}
+
+// Retrieve all drafts belonging to an employee.
+export function getDraftsService({ senderId, page, limit }) {
+  const offset = (page - 1) * limit;
+
+  const countDrafts = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM emails
+    WHERE sender_id = ?
+      AND status = 'DRAFT'
+  `);
+
+  const getDrafts = db.prepare(`
+    SELECT
+      id,
+      subject,
+      body,
+      created_at
+    FROM emails
+    WHERE sender_id = ?
+      AND status = 'DRAFT'
+    ORDER BY created_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  `);
+
+  const total = countDrafts.get(senderId).total;
+
+  const drafts = getDrafts.all(senderId, limit, offset);
+
+  return {
+    drafts,
+
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total,
+      hasPreviousPage: page > 1,
+    },
+  };
+}
+
+// Retrieve one draft.
+export function getDraftService({ senderId, draftId }) {
+  const draft = findDraft.get(draftId, senderId);
+
+  if (!draft) {
+    throw new EmailServiceError("Draft not found.", 404, "DRAFT_NOT_FOUND");
+  }
+
+  return draft;
+}
+
+// Update an existing draft.
+export function updateDraftService({ senderId, draftId, subject, body }) {
+  const hasSubject = subject !== undefined;
+  const hasBody = body !== undefined;
+
+  if (!hasSubject && !hasBody) {
+    throw new EmailServiceError(
+      "Provide at least one field to update.",
+      400,
+      "EMPTY_UPDATE",
+    );
+  }
+
+  if (
+    (hasSubject && typeof subject !== "string") ||
+    (hasBody && typeof body !== "string")
+  ) {
+    throw new EmailServiceError(
+      "Subject and body must be strings.",
+      400,
+      "INVALID_DRAFT",
+    );
+  }
+
+  const assignments = [];
+  const values = [];
+
+  if (hasSubject) {
+    assignments.push("subject = ?");
+    values.push(subject);
+  }
+
+  if (hasBody) {
+    assignments.push("body = ?");
+    values.push(body);
+  }
+
+  const updateDraft = db.prepare(`
+    UPDATE emails
+    SET ${assignments.join(", ")}
+    WHERE id = ?
+      AND sender_id = ?
+      AND status = 'DRAFT'
+  `);
+
+  const result = updateDraft.run(...values, draftId, senderId);
+
+  if (result.changes === 0) {
+    throw new EmailServiceError("Draft not found.", 404, "DRAFT_NOT_FOUND");
+  }
+
+  return findDraft.get(draftId, senderId);
+}
+
+// Delete a draft.
+export function deleteDraftService({ senderId, draftId }) {
+  const deleteDraft = db.prepare(`
+    DELETE FROM emails
+    WHERE id = ?
+      AND sender_id = ?
+      AND status = 'DRAFT'
+  `);
+
+  const result = deleteDraft.run(draftId, senderId);
+
+  if (result.changes === 0) {
+    throw new EmailServiceError("Draft not found.", 404, "DRAFT_NOT_FOUND");
+  }
+
+  return true;
+}
