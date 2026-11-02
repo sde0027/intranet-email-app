@@ -35,7 +35,7 @@ const upload = multer({
   storage,
 
   limits: {
-    fileSize: 30 * 1024 * 1024, // 10 MB per file
+    fileSize: 30 * 1024 * 1024, // 30 MB per file
     files: 5,
   },
 
@@ -67,7 +67,7 @@ export function uploadAttachments(req, res, next) {
 
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(413).json({
-        error: "Each attachment must be 10 MB or smaller.",
+        error: "Each attachment must be 30 MB or smaller.",
       });
     }
 

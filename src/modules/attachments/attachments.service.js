@@ -93,7 +93,6 @@ export function getEmailAttachmentsService({ emailId, userId }) {
           FROM email_recipients er
           WHERE er.email_id = e.id
             AND er.recipient_id = ?
-            AND er.is_deleted = 0
         )
       )
     ORDER BY a.id
@@ -116,7 +115,6 @@ export function getEmailAttachmentsService({ emailId, userId }) {
           FROM email_recipients er
           WHERE er.email_id = e.id
             AND er.recipient_id = ?
-            AND er.is_deleted = 0
         )
       )
   `,
@@ -157,7 +155,6 @@ export function getAttachmentDownloadService({ attachmentId, userId }) {
           FROM email_recipients er
           WHERE er.email_id = e.id
             AND er.recipient_id = ?
-            AND er.is_deleted = 0
         )
       )
   `,

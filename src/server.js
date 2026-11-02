@@ -1,7 +1,9 @@
-import app from "./app.js";
+import app, { runMaintenance } from "./app.js";
 import { config } from "./config/config.js";
 import { db } from "./database/connection.js";
 import "./database/migrate.js";
+
+runMaintenance();
 
 const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`Server running on port ${config.port}`);

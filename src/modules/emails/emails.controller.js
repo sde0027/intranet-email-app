@@ -12,6 +12,10 @@ import {
   replyToEmailService,
   replyAllToEmailService,
   forwardEmailService,
+  moveEmailToTrashService,
+  getTrashService,
+  restoreEmailService,
+  permanentlyDeleteEmailService,
   EmailServiceError,
 } from "./emails.service.js";
 
@@ -449,7 +453,7 @@ export function getUnreadCount(req, res) {
 }
 
 function handleEmailActionError(error, res, operation) {
-  if (error instanceof EmailServiceError) {
+  if (error instanceof EmailServiceError || (error.status && error.code)) {
     return res.status(error.status).json({
       error: error.message,
       code: error.code,
@@ -485,76 +489,178 @@ function validateEmailActionRequest(req, res) {
   return emailId;
 }
 
-export function replyToEmail(req, res) {
+function parseMultipartRecipients(value, defaultValue) {
+  if (value === undefined || value === "") {
+    return defaultValue;
+  }
+
+  if (typeof value !== "string") {
+    return value;
+  }
+
   try {
-    const emailId = validateEmailActionRequest(req, res);
-
-    if (!emailId) {
-      return;
-    }
-
-    const result = replyToEmailService({
-      emailId,
-      senderId: req.user.id,
-      body: req.body.body,
-    });
-
-    return res.status(201).json({
-      message: "Reply sent successfully.",
-      email: result,
-    });
-  } catch (error) {
-    return handleEmailActionError(error, res, "Send reply");
+    return JSON.parse(value);
+  } catch {
+    throw new EmailServiceError(
+      "Recipient fields must contain valid JSON arrays.",
+      400,
+      "INVALID_RECIPIENTS",
+    );
   }
 }
 
-export function replyAllToEmail(req, res) {
+async function handleEmailWithAttachments(req, res, operation) {
+  const files = req.files ?? [];
+
   try {
     const emailId = validateEmailActionRequest(req, res);
 
-    if (!emailId) {
+    if (emailId === false) {
+      cleanupUploadedFiles(files);
       return;
     }
 
-    const result = replyAllToEmailService({
-      emailId,
-      senderId: req.user.id,
-      body: req.body.body,
-    });
+    await validateUploadedFiles(files);
+
+    const result = await operation(emailId, files);
 
     return res.status(201).json({
-      message: "Reply-all sent successfully.",
+      message: "Email sent successfully.",
       email: result,
+      attachments: files.map((file) => ({
+        original_name: file.originalname,
+        mime_type: file.mimetype,
+        size_bytes: file.size,
+      })),
     });
   } catch (error) {
-    return handleEmailActionError(error, res, "Send reply-all");
+    cleanupUploadedFiles(files);
+    return handleEmailActionError(error, res, "Send email");
   }
 }
 
-export function forwardEmail(req, res) {
-  try {
-    const emailId = validateEmailActionRequest(req, res);
+export async function replyToEmail(req, res) {
+  return handleEmailWithAttachments(req, res, (emailId, attachments) =>
+    replyToEmailService({
+      emailId,
+      senderId: req.user.id,
+      body: req.body.body ?? "",
+      attachments,
+    }),
+  );
+}
 
-    if (!emailId) {
-      return;
-    }
+export async function replyAllToEmail(req, res) {
+  return handleEmailWithAttachments(req, res, (emailId, attachments) =>
+    replyAllToEmailService({
+      emailId,
+      senderId: req.user.id,
+      body: req.body.body ?? "",
+      attachments,
+    }),
+  );
+}
 
-    const { to, cc, bcc, body = "" } = req.body;
+export async function forwardEmail(req, res) {
+  return handleEmailWithAttachments(req, res, (emailId, attachments) => {
+    const to = parseMultipartRecipients(req.body.to, undefined);
+    const cc = parseMultipartRecipients(req.body.cc, []);
+    const bcc = parseMultipartRecipients(req.body.bcc, []);
 
-    const result = forwardEmailService({
+    return forwardEmailService({
       emailId,
       senderId: req.user.id,
       to,
       cc,
       bcc,
-      body,
+      body: req.body.body ?? "",
+      attachments,
+    });
+  });
+}
+
+export function moveEmailToTrash(req, res) {
+  try {
+    const emailId = parseEmailId(req.params.id);
+
+    if (emailId === null) {
+      return res.status(400).json({ error: "Invalid email ID." });
+    }
+
+    const result = moveEmailToTrashService({
+      emailId,
+      recipientId: req.user.id,
     });
 
-    return res.status(201).json({
-      message: "Email forwarded successfully.",
+    return res.status(200).json({
+      message: "Email moved to Trash.",
       email: result,
     });
   } catch (error) {
-    return handleEmailActionError(error, res, "Forward email");
+    return handleEmailActionError(error, res, "Move email to Trash");
+  }
+}
+
+export function getTrash(req, res) {
+  try {
+    const pagination = parsePagination(req.query);
+
+    if (!pagination) {
+      return res.status(400).json({
+        error: "Invalid pagination parameters. Maximum limit is 100.",
+      });
+    }
+
+    const result = getTrashService({
+      userId: req.user.id,
+      ...pagination,
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    return handleEmailActionError(error, res, "Retrieve Trash");
+  }
+}
+
+export function restoreEmail(req, res) {
+  try {
+    const emailId = parseEmailId(req.params.id);
+
+    if (emailId === null) {
+      return res.status(400).json({ error: "Invalid email ID." });
+    }
+
+    const result = restoreEmailService({
+      emailId,
+      recipientId: req.user.id,
+    });
+
+    return res.status(200).json({
+      message: "Email restored to Inbox.",
+      email: result,
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Restore email");
+  }
+}
+
+export function permanentlyDeleteEmail(req, res) {
+  try {
+    const emailId = parseEmailId(req.params.id);
+
+    if (emailId === null) {
+      return res.status(400).json({ error: "Invalid email ID." });
+    }
+
+    permanentlyDeleteEmailService({
+      emailId,
+      recipientId: req.user.id,
+    });
+
+    return res.status(200).json({
+      message: "Email permanently deleted from your Trash.",
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Permanently delete email");
   }
 }

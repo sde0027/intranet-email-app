@@ -653,7 +653,12 @@ function addSubjectPrefix(prefix, subject) {
 }
 
 // Reply only to the original sender.
-export function replyToEmailService({ emailId, senderId, body }) {
+export function replyToEmailService({
+  emailId,
+  senderId,
+  body,
+  attachments = [],
+}) {
   const original = getReplySource(emailId, senderId);
 
   return sendEmailService({
@@ -664,30 +669,33 @@ export function replyToEmailService({ emailId, senderId, body }) {
     subject: addSubjectPrefix("Re", original.subject),
     body,
     parentEmailId: original.id,
+    attachments,
   });
 }
 
 // Reply to the original sender and visible TO/CC recipients.
-export function replyAllToEmailService({ emailId, senderId, body }) {
+export function replyAllToEmailService({
+  emailId,
+  senderId,
+  body,
+  attachments = [],
+}) {
   const original = getReplySource(emailId, senderId);
 
   const originalRecipients = db
     .prepare(
       `
-    SELECT
-      recipient_id,
-      recipient_type
-    FROM email_recipients
-    WHERE email_id = ?
-      AND recipient_type IN ('TO', 'CC')
-  `,
+      SELECT recipient_id, recipient_type
+      FROM email_recipients
+      WHERE email_id = ?
+        AND recipient_type IN ('TO', 'CC')
+    `,
     )
     .all(original.id);
 
   const to = [];
   const cc = [];
 
-  // Include the original sender as a TO recipient.
   if (original.sender_id !== senderId) {
     to.push(original.sender_id);
   }
@@ -695,12 +703,8 @@ export function replyAllToEmailService({ emailId, senderId, body }) {
   for (const recipient of originalRecipients) {
     const recipientId = recipient.recipient_id;
 
-    // Exclude the person composing this reply.
-    if (recipientId === senderId) {
-      continue;
-    }
+    if (recipientId === senderId) continue;
 
-    // Avoid duplicate recipients across TO and CC.
     if (to.includes(recipientId) || cc.includes(recipientId)) {
       continue;
     }
@@ -728,6 +732,7 @@ export function replyAllToEmailService({ emailId, senderId, body }) {
     subject: addSubjectPrefix("Re", original.subject),
     body,
     parentEmailId: original.id,
+    attachments,
   });
 }
 
@@ -739,6 +744,7 @@ export function forwardEmailService({
   cc = [],
   bcc = [],
   body = "",
+  attachments = [],
 }) {
   const original = getForwardSource(emailId, senderId);
 
@@ -769,5 +775,177 @@ export function forwardEmailService({
     subject: addSubjectPrefix("Fwd", original.subject),
     body: forwardedBody,
     parentEmailId: original.id,
+    attachments,
   });
+}
+
+const TRASH_RETENTION_DAYS = 30;
+
+// Move one recipient's copy of an email into Trash.
+export function moveEmailToTrashService({ emailId, recipientId }) {
+  const result = db
+    .prepare(
+      `
+    UPDATE email_recipients
+    SET
+      is_deleted = 1,
+      deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE email_id = ?
+      AND recipient_id = ?
+      AND is_deleted = 0
+      AND EXISTS (
+        SELECT 1
+        FROM emails
+        WHERE emails.id = email_recipients.email_id
+          AND emails.status = 'SENT'
+      )
+  `,
+    )
+    .run(emailId, recipientId);
+
+  if (result.changes === 0) {
+    throw new EmailServiceError(
+      "Email not found in your inbox.",
+      404,
+      "EMAIL_NOT_FOUND",
+    );
+  }
+
+  return { id: emailId, is_deleted: 1 };
+}
+
+// Retrieve the current user's Trash with pagination.
+export function getTrashService({ userId, page, limit }) {
+  const offset = (page - 1) * limit;
+
+  const countTrash = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM email_recipients er
+    INNER JOIN emails e ON e.id = er.email_id
+    WHERE er.recipient_id = ?
+      AND er.is_deleted = 1
+      AND e.status = 'SENT'
+  `);
+
+  const getTrash = db.prepare(`
+    SELECT
+      e.id,
+      e.subject,
+      e.body,
+      e.sent_at,
+      er.deleted_at,
+      er.is_read,
+      er.recipient_type,
+      sender.id AS sender_id,
+      sender.name AS sender_name,
+      sender.email AS sender_email
+    FROM email_recipients er
+    INNER JOIN emails e ON e.id = er.email_id
+    INNER JOIN users sender ON sender.id = e.sender_id
+    WHERE er.recipient_id = ?
+      AND er.is_deleted = 1
+      AND e.status = 'SENT'
+    ORDER BY er.deleted_at DESC, e.id DESC
+    LIMIT ? OFFSET ?
+  `);
+
+  const total = countTrash.get(userId).total;
+  const messages = getTrash.all(userId, limit, offset);
+
+  return {
+    messages,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total,
+      hasPreviousPage: page > 1,
+    },
+  };
+}
+
+// Restore one email from Trash to Inbox.
+export function restoreEmailService({ emailId, recipientId }) {
+  const result = db
+    .prepare(
+      `
+    UPDATE email_recipients
+    SET
+      is_deleted = 0,
+      deleted_at = NULL
+    WHERE email_id = ?
+      AND recipient_id = ?
+      AND is_deleted = 1
+      AND EXISTS (
+        SELECT 1
+        FROM emails
+        WHERE emails.id = email_recipients.email_id
+          AND emails.status = 'SENT'
+      )
+  `,
+    )
+    .run(emailId, recipientId);
+
+  if (result.changes === 0) {
+    throw new EmailServiceError(
+      "Email not found in your Trash.",
+      404,
+      "TRASH_EMAIL_NOT_FOUND",
+    );
+  }
+
+  return { id: emailId, is_deleted: 0 };
+}
+
+// Permanently remove only this user's Trash entry.
+// The original email and its attachments remain intact.
+export function permanentlyDeleteEmailService({ emailId, recipientId }) {
+  const result = db
+    .prepare(
+      `
+    DELETE FROM email_recipients
+    WHERE email_id = ?
+      AND recipient_id = ?
+      AND is_deleted = 1
+      AND EXISTS (
+        SELECT 1
+        FROM emails
+        WHERE emails.id = email_recipients.email_id
+          AND emails.status = 'SENT'
+      )
+  `,
+    )
+    .run(emailId, recipientId);
+
+  if (result.changes === 0) {
+    throw new EmailServiceError(
+      "Email not found in your Trash.",
+      404,
+      "TRASH_EMAIL_NOT_FOUND",
+    );
+  }
+
+  return true;
+}
+
+// Remove recipient entries that have been in Trash for 30 days.
+// This does not delete emails or physical attachment files.
+export function cleanupExpiredTrashService() {
+  const result = db
+    .prepare(
+      `
+    DELETE FROM email_recipients
+    WHERE is_deleted = 1
+      AND deleted_at IS NOT NULL
+      AND deleted_at <= strftime(
+        '%Y-%m-%dT%H:%M:%fZ',
+        'now',
+        '-${TRASH_RETENTION_DAYS} days'
+      )
+  `,
+    )
+    .run();
+
+  return result.changes;
 }

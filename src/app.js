@@ -4,6 +4,7 @@ import "dotenv/config";
 // session imports
 import session from "express-session";
 import { SQLiteSessionStore } from "./middleware/sqlite-session-store.js";
+import { cleanupExpiredTrashService } from "./modules/emails/emails.service.js";
 
 // Route imports
 import authRoutes from "./modules/auth/auth.routes.js";
@@ -62,17 +63,32 @@ app.get("/api/health", (req, res) => {
   }
 });
 
-const cleanupTimer = setInterval(
-  () => {
-    try {
-      sessionStore.clearExpired();
-    } catch (error) {
-      console.error("Session cleanup failed:", error.message);
+function runMaintenance() {
+  // Clean expired sessions.
+  try {
+    sessionStore.clearExpired();
+  } catch (error) {
+    console.error("Session cleanup failed:", error.message);
+  }
+
+  // Permanently remove recipient associations for expired Trash items.
+  try {
+    const deletedCount = cleanupExpiredTrashService();
+
+    if (deletedCount > 0) {
+      console.log(
+        `Trash cleanup completed: ${deletedCount} expired email associations removed.`,
+      );
     }
-  },
-  60 * 60 * 1000,
-);
+  } catch (error) {
+    console.error("Trash cleanup failed:", error.message);
+  }
+}
+
+const cleanupTimer = setInterval(runMaintenance, 60 * 60 * 1000);
 
 cleanupTimer.unref();
+
+export { runMaintenance };
 
 export default app;
