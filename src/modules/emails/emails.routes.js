@@ -12,6 +12,9 @@ import {
   markAsRead,
   markAsUnread,
   getUnreadCount,
+  replyToEmail,
+  replyAllToEmail,
+  forwardEmail,
 } from "./emails.controller.js";
 
 const router = Router();
@@ -29,5 +32,9 @@ router.delete("/drafts/:id", authenticate, deleteDraft);
 router.get("/unread-count", authenticate, getUnreadCount);
 router.patch("/:id/read", authenticate, markAsRead);
 router.patch("/:id/unread", authenticate, markAsUnread);
+
+router.post("/:id/reply", authenticate, replyToEmail);
+router.post("/:id/reply-all", authenticate, replyAllToEmail);
+router.post("/:id/forward", authenticate, forwardEmail);
 
 export default router;

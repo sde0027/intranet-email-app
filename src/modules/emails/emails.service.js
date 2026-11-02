@@ -74,6 +74,7 @@ export function sendEmailService({
   bcc = [],
   subject = "",
   body = "",
+  parentEmailId = null,
 }) {
   // 1. Validate message data.
   validateMessage(subject, body);
@@ -112,9 +113,10 @@ export function sendEmailService({
       sender_id,
       subject,
       body,
-      status
+      status,
+      parent_email_id
     )
-    VALUES (?, ?, ?, 'DRAFT')
+    VALUES (?, ?, ?, 'DRAFT',?)
   `);
 
   const insertRecipient = db.prepare(`
@@ -135,14 +137,14 @@ export function sendEmailService({
   `);
 
   const getSentEmail = db.prepare(`
-    SELECT id, sender_id, subject, status, created_at, sent_at
+    SELECT id, sender_id, subject, status, parent_email_id, created_at, sent_at
     FROM emails
     WHERE id = ?
   `);
 
   // 6. Execute all writes inside one transaction.
   const sendTransaction = db.transaction(() => {
-    const emailResult = insertEmail.run(senderId, subject, body);
+    const emailResult = insertEmail.run(senderId, subject, body, parentEmailId);
 
     const emailId = Number(emailResult.lastInsertRowid);
 
@@ -556,4 +558,213 @@ export function getUnreadCountService({ recipientId }) {
   return {
     unreadCount: result.unread_count,
   };
+}
+
+// Retrieve an original email only if the current user received it.
+function getReplySource(emailId, userId) {
+  const source = db
+    .prepare(
+      `
+    SELECT
+      e.id,
+      e.sender_id,
+      e.subject,
+      e.body,
+      e.sent_at
+    FROM emails e
+    INNER JOIN email_recipients er
+      ON er.email_id = e.id
+    WHERE e.id = ?
+      AND er.recipient_id = ?
+      AND er.is_deleted = 0
+      AND e.status = 'SENT'
+  `,
+    )
+    .get(emailId, userId);
+
+  if (!source) {
+    throw new EmailServiceError(
+      "Email not found in your inbox.",
+      404,
+      "EMAIL_NOT_FOUND",
+    );
+  }
+
+  return source;
+}
+
+// Retrieve an original email that the user either sent or received.
+function getForwardSource(emailId, userId) {
+  const source = db
+    .prepare(
+      `
+    SELECT
+      e.id,
+      e.sender_id,
+      e.subject,
+      e.body,
+      e.sent_at,
+      u.name AS sender_name,
+      u.email AS sender_email
+    FROM emails e
+    INNER JOIN users u
+      ON u.id = e.sender_id
+    WHERE e.id = ?
+      AND e.status = 'SENT'
+      AND (
+        e.sender_id = ?
+        OR EXISTS (
+          SELECT 1
+          FROM email_recipients er
+          WHERE er.email_id = e.id
+            AND er.recipient_id = ?
+            AND er.is_deleted = 0
+        )
+      )
+  `,
+    )
+    .get(emailId, userId, userId);
+
+  if (!source) {
+    throw new EmailServiceError("Email not found.", 404, "EMAIL_NOT_FOUND");
+  }
+
+  return source;
+}
+
+// Avoid repeatedly adding prefixes.
+function addSubjectPrefix(prefix, subject) {
+  const normalizedSubject = subject.trim();
+
+  if (!normalizedSubject) {
+    return `${prefix}: (no subject)`;
+  }
+
+  const pattern = new RegExp(`^${prefix}\\s*:`, "i");
+
+  if (pattern.test(normalizedSubject)) {
+    return normalizedSubject;
+  }
+
+  return `${prefix}: ${normalizedSubject}`;
+}
+
+// Reply only to the original sender.
+export function replyToEmailService({ emailId, senderId, body }) {
+  const original = getReplySource(emailId, senderId);
+
+  return sendEmailService({
+    senderId,
+    to: [original.sender_id],
+    cc: [],
+    bcc: [],
+    subject: addSubjectPrefix("Re", original.subject),
+    body,
+    parentEmailId: original.id,
+  });
+}
+
+// Reply to the original sender and visible TO/CC recipients.
+export function replyAllToEmailService({ emailId, senderId, body }) {
+  const original = getReplySource(emailId, senderId);
+
+  const originalRecipients = db
+    .prepare(
+      `
+    SELECT
+      recipient_id,
+      recipient_type
+    FROM email_recipients
+    WHERE email_id = ?
+      AND recipient_type IN ('TO', 'CC')
+  `,
+    )
+    .all(original.id);
+
+  const to = [];
+  const cc = [];
+
+  // Include the original sender as a TO recipient.
+  if (original.sender_id !== senderId) {
+    to.push(original.sender_id);
+  }
+
+  for (const recipient of originalRecipients) {
+    const recipientId = recipient.recipient_id;
+
+    // Exclude the person composing this reply.
+    if (recipientId === senderId) {
+      continue;
+    }
+
+    // Avoid duplicate recipients across TO and CC.
+    if (to.includes(recipientId) || cc.includes(recipientId)) {
+      continue;
+    }
+
+    if (recipient.recipient_type === "TO") {
+      to.push(recipientId);
+    } else {
+      cc.push(recipientId);
+    }
+  }
+
+  if (to.length === 0) {
+    throw new EmailServiceError(
+      "There are no valid recipients for this reply.",
+      400,
+      "NO_REPLY_RECIPIENTS",
+    );
+  }
+
+  return sendEmailService({
+    senderId,
+    to,
+    cc,
+    bcc: [],
+    subject: addSubjectPrefix("Re", original.subject),
+    body,
+    parentEmailId: original.id,
+  });
+}
+
+// Forward an existing email to new recipients.
+export function forwardEmailService({
+  emailId,
+  senderId,
+  to,
+  cc = [],
+  bcc = [],
+  body = "",
+}) {
+  const original = getForwardSource(emailId, senderId);
+
+  if (typeof body !== "string") {
+    throw new EmailServiceError(
+      "Message body must be a string.",
+      400,
+      "INVALID_MESSAGE",
+    );
+  }
+
+  const forwardedBody = [
+    body,
+    "",
+    "---------- Forwarded message ----------",
+    `From: ${original.sender_name} <${original.sender_email}>`,
+    `Date: ${original.sent_at}`,
+    `Subject: ${original.subject || "(no subject)"}`,
+    "",
+    original.body,
+  ].join("\n");
+
+  return sendEmailService({
+    senderId,
+    to,
+    cc,
+    bcc,
+    subject: addSubjectPrefix("Fwd", original.subject),
+    body: forwardedBody,
+    parentEmailId: original.id,
+  });
 }

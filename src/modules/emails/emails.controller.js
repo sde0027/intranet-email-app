@@ -9,6 +9,9 @@ import {
   deleteDraftService,
   markEmailReadService,
   getUnreadCountService,
+  replyToEmailService,
+  replyAllToEmailService,
+  forwardEmailService,
   EmailServiceError,
 } from "./emails.service.js";
 
@@ -401,5 +404,116 @@ export function getUnreadCount(req, res) {
     return res.status(500).json({
       error: "Unable to retrieve unread count.",
     });
+  }
+}
+
+function handleEmailActionError(error, res, operation) {
+  if (error instanceof EmailServiceError) {
+    return res.status(error.status).json({
+      error: error.message,
+      code: error.code,
+    });
+  }
+
+  console.error(`${operation} failed:`, error);
+
+  return res.status(500).json({
+    error: `Unable to ${operation.toLowerCase()}.`,
+  });
+}
+
+function validateEmailActionRequest(req, res) {
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+    res.status(400).json({
+      error: "A valid JSON request body is required.",
+    });
+
+    return false;
+  }
+
+  const emailId = parseEmailId(req.params.id);
+
+  if (emailId === null) {
+    res.status(400).json({
+      error: "Invalid email ID.",
+    });
+
+    return false;
+  }
+
+  return emailId;
+}
+
+export function replyToEmail(req, res) {
+  try {
+    const emailId = validateEmailActionRequest(req, res);
+
+    if (!emailId) {
+      return;
+    }
+
+    const result = replyToEmailService({
+      emailId,
+      senderId: req.user.id,
+      body: req.body.body,
+    });
+
+    return res.status(201).json({
+      message: "Reply sent successfully.",
+      email: result,
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Send reply");
+  }
+}
+
+export function replyAllToEmail(req, res) {
+  try {
+    const emailId = validateEmailActionRequest(req, res);
+
+    if (!emailId) {
+      return;
+    }
+
+    const result = replyAllToEmailService({
+      emailId,
+      senderId: req.user.id,
+      body: req.body.body,
+    });
+
+    return res.status(201).json({
+      message: "Reply-all sent successfully.",
+      email: result,
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Send reply-all");
+  }
+}
+
+export function forwardEmail(req, res) {
+  try {
+    const emailId = validateEmailActionRequest(req, res);
+
+    if (!emailId) {
+      return;
+    }
+
+    const { to, cc, bcc, body = "" } = req.body;
+
+    const result = forwardEmailService({
+      emailId,
+      senderId: req.user.id,
+      to,
+      cc,
+      bcc,
+      body,
+    });
+
+    return res.status(201).json({
+      message: "Email forwarded successfully.",
+      email: result,
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Forward email");
   }
 }
