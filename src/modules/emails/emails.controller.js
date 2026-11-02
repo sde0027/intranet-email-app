@@ -15,33 +15,74 @@ import {
   EmailServiceError,
 } from "./emails.service.js";
 
-export function sendEmail(req, res) {
+import {
+  validateUploadedFiles,
+  cleanupUploadedFiles,
+} from "../attachments/attachments.service.js";
+
+export async function sendEmail(req, res) {
+  const files = req.files ?? [];
+
   try {
     if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+      cleanupUploadedFiles(files);
+
       return res.status(400).json({
-        error: "A valid JSON request body is required.",
+        error: "A valid request body is required.",
       });
     }
 
-    const senderId = req.user.id;
+    // Multipart form fields arrive as strings.
+    // Parse recipient arrays while keeping JSON requests unchanged.
+    function parseRecipientField(value) {
+      if (typeof value !== "string") {
+        return value;
+      }
 
-    const { to, cc, bcc, subject, body } = req.body;
+      try {
+        return JSON.parse(value);
+      } catch {
+        throw new EmailServiceError(
+          "Recipient fields must contain valid JSON arrays.",
+          400,
+          "INVALID_RECIPIENTS",
+        );
+      }
+    }
+
+    const to = parseRecipientField(req.body.to);
+    const cc =
+      req.body.cc === undefined ? [] : parseRecipientField(req.body.cc);
+    const bcc =
+      req.body.bcc === undefined ? [] : parseRecipientField(req.body.bcc);
+
+    // Check actual file signatures before saving metadata.
+    await validateUploadedFiles(files);
 
     const result = sendEmailService({
-      senderId,
+      senderId: req.user.id,
       to,
       cc,
       bcc,
-      subject,
-      body,
+      subject: req.body.subject ?? "",
+      body: req.body.body ?? "",
+      attachments: files,
     });
 
     return res.status(201).json({
       message: "Email sent successfully.",
       email: result,
+      attachments: files.map((file) => ({
+        original_name: file.originalname,
+        mime_type: file.mimetype,
+        size_bytes: file.size,
+      })),
     });
   } catch (error) {
-    if (error instanceof EmailServiceError) {
+    // If sending or validation fails, remove the uploaded files.
+    cleanupUploadedFiles(files);
+
+    if (error instanceof EmailServiceError || (error.status && error.code)) {
       return res.status(error.status).json({
         error: error.message,
         code: error.code,

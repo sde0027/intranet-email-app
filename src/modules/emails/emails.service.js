@@ -1,3 +1,4 @@
+import { insertAttachmentMetadata } from "../attachments/attachments.service.js";
 import { db } from "../../database/connection.js";
 
 export class EmailServiceError extends Error {
@@ -75,6 +76,7 @@ export function sendEmailService({
   subject = "",
   body = "",
   parentEmailId = null,
+  attachments = [],
 }) {
   // 1. Validate message data.
   validateMessage(subject, body);
@@ -153,6 +155,7 @@ export function sendEmailService({
         insertRecipient.run(emailId, recipientId, group.type);
       }
     }
+    insertAttachmentMetadata(emailId, attachments);
 
     markAsSent.run(emailId);
 
