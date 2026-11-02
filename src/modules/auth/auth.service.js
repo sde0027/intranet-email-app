@@ -2,9 +2,15 @@ import argon2 from "argon2";
 import { db } from "../../database/connection.js";
 
 export async function login({ email, password }) {
-  const cleanEmail = email?.trim().toLowerCase();
+  if (typeof email !== "string" || typeof password !== "string") {
+    const error = new Error("Email and password are required.");
+    error.statusCode = 400;
+    throw error;
+  }
 
-  if (!cleanEmail || typeof password !== "string" || !password) {
+  const cleanEmail = email.trim().toLowerCase();
+
+  if (!cleanEmail || !password) {
     const error = new Error("Email and password are required.");
     error.statusCode = 400;
     throw error;

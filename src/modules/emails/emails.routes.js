@@ -35,15 +35,16 @@ router.post("/send", authenticate, uploadAttachments, sendEmail);
 router.get("/inbox", authenticate, getInbox);
 router.get("/sent", authenticate, getSent);
 router.get("/trash", authenticate, getTrash);
-router.get("/:id", authenticate, getEmailById);
 
+// Static paths must be registered before /:id to avoid being captured as IDs.
 router.post("/drafts", authenticate, createDraft);
 router.get("/drafts", authenticate, getDrafts);
 router.get("/drafts/:id", authenticate, getDraft);
 router.patch("/drafts/:id", authenticate, updateDraft);
 router.delete("/drafts/:id", authenticate, deleteDraft);
-
 router.get("/unread-count", authenticate, getUnreadCount);
+
+router.get("/:id", authenticate, getEmailById);
 router.patch("/:id/read", authenticate, markAsRead);
 router.patch("/:id/unread", authenticate, markAsUnread);
 
