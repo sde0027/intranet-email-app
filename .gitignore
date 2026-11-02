@@ -158,3 +158,5 @@ dist
 .ionide
 
 data/
+
+.vscode/
