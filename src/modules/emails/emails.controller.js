@@ -16,6 +16,7 @@ import {
   getTrashService,
   restoreEmailService,
   permanentlyDeleteEmailService,
+  getEmailByIdService,
   EmailServiceError,
 } from "./emails.service.js";
 
@@ -201,6 +202,29 @@ export function getSent(req, res) {
     return res.status(500).json({
       error: "Unable to retrieve sent messages.",
     });
+  }
+}
+
+export function getEmailById(req, res) {
+  try {
+    const emailId = parseEmailId(req.params.id);
+
+    if (emailId === null) {
+      return res.status(400).json({
+        error: "Invalid email ID.",
+      });
+    }
+
+    const email = getEmailByIdService({
+      emailId,
+      userId: req.user.id,
+    });
+
+    return res.status(200).json({
+      email,
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Retrieve email");
   }
 }
 
@@ -470,7 +494,7 @@ function handleEmailActionError(error, res, operation) {
 function validateEmailActionRequest(req, res) {
   if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
     res.status(400).json({
-      error: "A valid JSON request body is required.",
+      error: "A valid request body is required.",
     });
 
     return false;

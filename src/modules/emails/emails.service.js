@@ -1,4 +1,7 @@
-import { insertAttachmentMetadata } from "../attachments/attachments.service.js";
+import {
+  insertAttachmentMetadata,
+  getEmailAttachmentsService,
+} from "../attachments/attachments.service.js";
 import { db } from "../../database/connection.js";
 
 export class EmailServiceError extends Error {
@@ -360,6 +363,149 @@ const findDraft = db.prepare(`
     AND sender_id = ?
     AND status = 'DRAFT'
 `);
+
+// Retrieve one sent email if the current user is its sender or recipient.
+export function getEmailByIdService({ emailId, userId }) {
+  // 1. Verify that the email exists and the user has access.
+  const email = db
+    .prepare(
+      `
+    SELECT
+      e.id,
+      e.sender_id,
+      e.subject,
+      e.body,
+      e.status,
+      e.parent_email_id,
+      e.created_at,
+      e.sent_at,
+
+      sender.name AS sender_name,
+      sender.email AS sender_email
+
+    FROM emails e
+
+    INNER JOIN users sender
+      ON sender.id = e.sender_id
+
+    WHERE e.id = ?
+      AND e.status = 'SENT'
+      AND (
+        e.sender_id = ?
+        OR EXISTS (
+          SELECT 1
+          FROM email_recipients er
+          WHERE er.email_id = e.id
+            AND er.recipient_id = ?
+        )
+      )
+  `,
+    )
+    .get(emailId, userId, userId);
+
+  if (!email) {
+    throw new EmailServiceError("Email not found.", 404, "EMAIL_NOT_FOUND");
+  }
+
+  // 2. Determine whether the current user is the sender.
+  const isSender = email.sender_id === userId;
+
+  // 3. Retrieve the current user's recipient-specific information.
+  const userRecipient = isSender
+    ? null
+    : db
+        .prepare(
+          `
+        SELECT recipient_type, is_read
+        FROM email_recipients
+        WHERE email_id = ?
+          AND recipient_id = ?
+      `,
+        )
+        .get(emailId, userId);
+
+  // 4. Retrieve recipients.
+  // The sender can see everyone, including BCC recipients.
+  // Other recipients can see TO and CC, but never the BCC list.
+  const recipients = db
+    .prepare(
+      `
+    SELECT
+      er.recipient_type,
+      u.id AS recipient_id,
+      u.name AS recipient_name,
+      u.email AS recipient_email
+
+    FROM email_recipients er
+
+    INNER JOIN users u
+      ON u.id = er.recipient_id
+
+    WHERE er.email_id = ?
+      AND (
+        ? = 1
+        OR er.recipient_type IN ('TO', 'CC')
+      )
+
+    ORDER BY
+      CASE er.recipient_type
+        WHEN 'TO' THEN 1
+        WHEN 'CC' THEN 2
+        WHEN 'BCC' THEN 3
+      END,
+      u.name
+  `,
+    )
+    .all(emailId, isSender ? 1 : 0);
+
+  // 5. Organize recipients into TO, CC and BCC groups.
+  const recipientGroups = {
+    to: [],
+    cc: [],
+    bcc: [],
+  };
+
+  for (const recipient of recipients) {
+    const group = recipient.recipient_type.toLowerCase();
+
+    recipientGroups[group].push({
+      id: recipient.recipient_id,
+      name: recipient.recipient_name,
+      email: recipient.recipient_email,
+    });
+  }
+
+  // 6. Retrieve attachment metadata.
+  const attachments = getEmailAttachmentsService({
+    emailId,
+    userId,
+  });
+
+  // 7. Return the complete email.
+  return {
+    id: email.id,
+    subject: email.subject,
+    body: email.body,
+    status: email.status,
+    parent_email_id: email.parent_email_id,
+    created_at: email.created_at,
+    sent_at: email.sent_at,
+
+    sender: {
+      id: email.sender_id,
+      name: email.sender_name,
+      email: email.sender_email,
+    },
+
+    recipients: recipientGroups,
+
+    is_sender: isSender,
+    recipient_type: userRecipient?.recipient_type ?? null,
+    is_read: userRecipient?.is_read ?? null,
+
+    attachments,
+  };
+}
 
 // Create a new draft.
 export function createDraftService({ senderId, subject = "", body = "" }) {

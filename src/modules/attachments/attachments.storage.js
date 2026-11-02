@@ -26,7 +26,6 @@ const storage = multer.diskStorage({
   },
 
   filename: (req, file, callback) => {
-    // Never use a user-provided filename as a storage path.
     callback(null, randomUUID());
   },
 });
@@ -35,7 +34,7 @@ const upload = multer({
   storage,
 
   limits: {
-    fileSize: 30 * 1024 * 1024, // 30 MB per file
+    fileSize: 30 * 1024 * 1024,
     files: 5,
   },
 
@@ -54,15 +53,6 @@ export function uploadAttachments(req, res, next) {
   upload.array("attachments", 5)(req, res, (error) => {
     if (!error) {
       return next();
-    }
-
-    // Remove any files Multer managed to save before encountering an error.
-    for (const file of req.files ?? []) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch {
-        // Cleanup is best-effort.
-      }
     }
 
     if (error.code === "LIMIT_FILE_SIZE") {

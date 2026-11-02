@@ -18,6 +18,7 @@ import {
   moveEmailToTrash,
   getTrash,
   restoreEmail,
+  getEmailById,
   permanentlyDeleteEmail,
 } from "./emails.controller.js";
 
@@ -34,6 +35,7 @@ router.post("/send", authenticate, uploadAttachments, sendEmail);
 router.get("/inbox", authenticate, getInbox);
 router.get("/sent", authenticate, getSent);
 router.get("/trash", authenticate, getTrash);
+router.get("/:id", authenticate, getEmailById);
 
 router.post("/drafts", authenticate, createDraft);
 router.get("/drafts", authenticate, getDrafts);
