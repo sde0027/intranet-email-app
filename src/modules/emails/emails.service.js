@@ -223,3 +223,120 @@ export function getInboxService({ userId, page, limit }) {
     },
   };
 }
+
+export function getSentService({ userId, page, limit }) {
+  const offset = (page - 1) * limit;
+
+  // Count all sent messages belonging to this sender.
+  const countSent = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM emails
+    WHERE sender_id = ?
+      AND status = 'SENT'
+  `);
+
+  // Retrieve the current page of sent messages.
+  const getSent = db.prepare(`
+    SELECT
+      id,
+      subject,
+      body,
+      created_at,
+      sent_at
+    FROM emails
+    WHERE sender_id = ?
+      AND status = 'SENT'
+    ORDER BY sent_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  `);
+
+  const total = countSent.get(userId).total;
+
+  const messages = getSent.all(userId, limit, offset);
+
+  // If the page is empty, there are no recipient records to retrieve.
+  if (messages.length === 0) {
+    return {
+      messages: [],
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: false,
+        hasPreviousPage: page > 1,
+      },
+    };
+  }
+
+  // Retrieve recipients for only the messages on this page.
+  const emailIds = messages.map((message) => message.id);
+  const placeholders = emailIds.map(() => "?").join(", ");
+
+  const getRecipients = db.prepare(`
+    SELECT
+      er.email_id,
+      er.recipient_type,
+      u.id AS recipient_id,
+      u.name AS recipient_name,
+      u.email AS recipient_email
+    FROM email_recipients er
+    INNER JOIN users u
+      ON u.id = er.recipient_id
+    WHERE er.email_id IN (${placeholders})
+    ORDER BY
+      CASE er.recipient_type
+        WHEN 'TO' THEN 1
+        WHEN 'CC' THEN 2
+        WHEN 'BCC' THEN 3
+      END,
+      u.name
+  `);
+
+  const recipients = getRecipients.all(...emailIds);
+
+  // Prepare a recipient collection for each message.
+  const recipientMap = new Map(
+    emailIds.map((id) => [
+      id,
+      {
+        to: [],
+        cc: [],
+        bcc: [],
+      },
+    ]),
+  );
+
+  for (const recipient of recipients) {
+    const groups = recipientMap.get(recipient.email_id);
+
+    const recipientDetails = {
+      id: recipient.recipient_id,
+      name: recipient.recipient_name,
+      email: recipient.recipient_email,
+    };
+
+    const groupName = recipient.recipient_type.toLowerCase();
+
+    groups[groupName].push(recipientDetails);
+  }
+
+  // Attach the recipient collections to their messages.
+  const messagesWithRecipients = messages.map((message) => ({
+    ...message,
+    recipients: recipientMap.get(message.id),
+  }));
+
+  return {
+    messages: messagesWithRecipients,
+
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total,
+      hasPreviousPage: page > 1,
+    },
+  };
+}

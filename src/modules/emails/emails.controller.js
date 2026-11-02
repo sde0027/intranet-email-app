@@ -1,6 +1,7 @@
 import {
   sendEmailService,
   getInboxService,
+  getSentService,
   EmailServiceError,
 } from "./emails.service.js";
 
@@ -96,6 +97,54 @@ export function getInbox(req, res) {
 
     return res.status(500).json({
       error: "Unable to retrieve inbox messages.",
+    });
+  }
+}
+
+export function getSent(req, res) {
+  try {
+    const userId = req.user.id;
+
+    const page = req.query.page ?? "1";
+    const limit = req.query.limit ?? "20";
+
+    if (
+      typeof page !== "string" ||
+      typeof limit !== "string" ||
+      !/^[1-9]\d*$/.test(page) ||
+      !/^[1-9]\d*$/.test(limit)
+    ) {
+      return res.status(400).json({
+        error: "Page and limit must be positive integers.",
+      });
+    }
+
+    const pageNumber = Number(page);
+    const pageSize = Number(limit);
+
+    if (
+      !Number.isSafeInteger(pageNumber) ||
+      !Number.isSafeInteger(pageSize) ||
+      pageSize > 100 ||
+      !Number.isSafeInteger((pageNumber - 1) * pageSize)
+    ) {
+      return res.status(400).json({
+        error: "Invalid pagination parameters. Maximum limit is 100.",
+      });
+    }
+
+    const result = getSentService({
+      userId,
+      page: pageNumber,
+      limit: pageSize,
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Sent messages retrieval failed:", error);
+
+    return res.status(500).json({
+      error: "Unable to retrieve sent messages.",
     });
   }
 }
