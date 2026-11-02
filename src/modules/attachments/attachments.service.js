@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { fileTypeFromFile } from "file-type";
+import path from "node:path";
 
 import { db } from "../../database/connection.js";
 import { attachmentDirectory } from "./attachments.storage.js";

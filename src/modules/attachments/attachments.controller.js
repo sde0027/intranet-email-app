@@ -67,18 +67,19 @@ export function downloadAttachment(req, res) {
       userId: req.user.id,
     });
 
-    // Force downloads instead of rendering uploaded content in the browser.
-    res.setHeader("Content-Type", "application/octet-stream");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-
     return res.download(
       attachment.filePath,
       attachment.original_name,
+      {
+        headers: {
+          "Content-Type": attachment.mime_type,
+          "X-Content-Type-Options": "nosniff",
+        },
+      },
       (error) => {
         if (error) {
           if (!res.headersSent) {
             console.error("Attachment download failed:", error);
-
             res.status(500).json({
               error: "Unable to download attachment.",
             });
