@@ -46,6 +46,63 @@ function validateTextFile(filePath) {
 
 // Check that a ZIP archive contains the required Office package entries.
 // We inspect archive metadata without extracting its contents.
+function validateOfficeArchive(filePath, extension) {
+  const requiredEntries = officeRequiredEntries[extension];
+
+  return new Promise((resolve) => {
+    yauzl.open(
+      filePath,
+      {
+        lazyEntries: true,
+        autoClose: true,
+        validateEntrySizes: true,
+        strictFileNames: true,
+      },
+      (error, zipFile) => {
+        if (error || !zipFile) {
+          return resolve(false);
+        }
+
+        const foundEntries = new Set();
+        let entryCount = 0;
+        let settled = false;
+
+        function finish(result) {
+          if (settled) return;
+
+          settled = true;
+          resolve(result);
+        }
+
+        zipFile.on("error", () => {
+          finish(false);
+        });
+
+        zipFile.on("end", () => {
+          finish(requiredEntries.every((entry) => foundEntries.has(entry)));
+        });
+
+        zipFile.on("entry", (entry) => {
+          entryCount++;
+
+          if (entryCount > 10000) {
+            finish(false);
+            zipFile.close();
+            return;
+          }
+
+          foundEntries.add(entry.fileName);
+          zipFile.readEntry();
+        });
+
+        zipFile.readEntry();
+      },
+    );
+  });
+}
+
+// Check that a ZIP archive contains the required Office package entries.
+// We inspect archive metadata without extracting its contents.
 export async function validateUploadedFiles(files = []) {
   for (const file of files) {
     const extension = path.extname(file.originalname).toLowerCase();
@@ -99,82 +156,6 @@ export async function validateUploadedFiles(files = []) {
           "INVALID_ATTACHMENT_TYPE",
         );
       }
-    }
-  }
-}
-
-// Validate the actual file contents, not just the supplied MIME type.
-export async function validateUploadedFiles(files = []) {
-  for (const file of files) {
-    const extension = path.extname(file.originalname).toLowerCase();
-
-    const expectedMime = allowedTypes[extension];
-
-    if (!expectedMime || expectedMime !== file.mimetype) {
-      throw new AttachmentServiceError(
-        `Unsupported or invalid file: ${file.originalname}`,
-        400,
-        "INVALID_ATTACHMENT_TYPE",
-      );
-    }
-
-    // TXT and CSV require content validation instead of magic signatures.
-    if (textExtensions.has(extension)) {
-      if (!validateTextFile(file.path)) {
-        throw new AttachmentServiceError(
-          `Invalid text file: ${file.originalname}`,
-          400,
-          "INVALID_ATTACHMENT_TYPE",
-        );
-      }
-
-      continue;
-    }
-
-    // Detect the actual binary file signature.
-    const detectedType = await fileTypeFromFile(file.path);
-
-    if (!detectedType || !allowedMimeTypes.has(detectedType.mime)) {
-      throw new AttachmentServiceError(
-        `Unsupported or invalid file: ${file.originalname}`,
-        400,
-        "INVALID_ATTACHMENT_TYPE",
-      );
-    }
-
-    // Office documents and ZIP archives have the same ZIP signature.
-    if (officeRequiredEntries[extension]) {
-      if (detectedType.mime !== expectedMime) {
-        throw new AttachmentServiceError(
-          `Invalid Office document: ${file.originalname}`,
-          400,
-          "INVALID_ATTACHMENT_TYPE",
-        );
-      }
-
-      const isValidOfficeDocument = await validateOfficeArchive(
-        file.path,
-        extension,
-      );
-
-      if (!isValidOfficeDocument) {
-        throw new AttachmentServiceError(
-          `Invalid Office document: ${file.originalname}`,
-          400,
-          "INVALID_ATTACHMENT_TYPE",
-        );
-      }
-
-      continue;
-    }
-
-    // For PDF, images and ordinary ZIP files, require an exact match.
-    if (detectedType.mime !== expectedMime) {
-      throw new AttachmentServiceError(
-        `File signature does not match its declared type: ${file.originalname}`,
-        400,
-        "INVALID_ATTACHMENT_TYPE",
-      );
     }
   }
 }
