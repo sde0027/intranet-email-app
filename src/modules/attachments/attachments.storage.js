@@ -11,13 +11,29 @@ export const attachmentDirectory = path.join(
 
 fs.mkdirSync(attachmentDirectory, { recursive: true });
 
-const allowedTypes = {
+// Extension-to-MIME mapping.
+// This is the single source of truth for allowed attachment types.
+export const allowedTypes = {
   ".pdf": "application/pdf",
+
+  ".txt": "text/plain",
+  ".csv": "text/csv",
+
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+  ".pptx":
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
   ".gif": "image/gif",
   ".webp": "image/webp",
+
+  ".zip": "application/zip",
 };
 
 const storage = multer.diskStorage({

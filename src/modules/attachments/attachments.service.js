@@ -1,9 +1,11 @@
 import fs from "node:fs";
 import { fileTypeFromFile } from "file-type";
 import path from "node:path";
+import yauzl from "yauzl";
+import { TextDecoder } from "node:util";
 
 import { db } from "../../database/connection.js";
-import { attachmentDirectory } from "./attachments.storage.js";
+import { attachmentDirectory, allowedTypes } from "./attachments.storage.js";
 
 export class AttachmentServiceError extends Error {
   constructor(message, status, code) {
@@ -14,26 +16,162 @@ export class AttachmentServiceError extends Error {
   }
 }
 
-const allowedMimeTypes = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-]);
+const textExtensions = new Set([".txt", ".csv"]);
 
-// Validate the actual file signature, not just the supplied MIME type.
+const officeRequiredEntries = {
+  ".docx": ["[Content_Types].xml", "word/document.xml"],
+  ".xlsx": ["[Content_Types].xml", "xl/workbook.xml"],
+  ".pptx": ["[Content_Types].xml", "ppt/presentation.xml"],
+};
+
+// Validate UTF-8 text files.
+// TXT and CSV do not have reliable magic signatures.
+function validateTextFile(filePath) {
+  const buffer = fs.readFileSync(filePath);
+
+  try {
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    const content = decoder.decode(buffer);
+
+    // Reject binary data disguised as text.
+    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(content)) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Check that a ZIP archive contains the required Office package entries.
+// We inspect archive metadata without extracting its contents.
 export async function validateUploadedFiles(files = []) {
   for (const file of files) {
-    const detectedType = await fileTypeFromFile(file.path);
+    const extension = path.extname(file.originalname).toLowerCase();
 
-    if (
-      !detectedType ||
-      !allowedMimeTypes.has(detectedType.mime) ||
-      detectedType.mime !== file.mimetype
-    ) {
+    const expectedMime = allowedTypes[extension];
+
+    // 1. Validate extension and client-provided MIME type.
+    if (!expectedMime || expectedMime !== file.mimetype) {
       throw new AttachmentServiceError(
         `Unsupported or invalid file: ${file.originalname}`,
+        400,
+        "INVALID_ATTACHMENT_TYPE",
+      );
+    }
+
+    // 2. TXT and CSV require content validation instead of magic signatures.
+    if (textExtensions.has(extension)) {
+      if (!validateTextFile(file.path)) {
+        throw new AttachmentServiceError(
+          `Invalid text file: ${file.originalname}`,
+          400,
+          "INVALID_ATTACHMENT_TYPE",
+        );
+      }
+
+      continue;
+    }
+
+    // 3. Detect the actual file type using its binary signature.
+    const detectedType = await fileTypeFromFile(file.path);
+
+    if (!detectedType || detectedType.mime !== expectedMime) {
+      throw new AttachmentServiceError(
+        `File signature does not match its declared type: ${file.originalname}`,
+        400,
+        "INVALID_ATTACHMENT_TYPE",
+      );
+    }
+
+    // 4. Office documents need an additional structural validation.
+    if (officeRequiredEntries[extension]) {
+      const isValidOfficeDocument = await validateOfficeArchive(
+        file.path,
+        extension,
+      );
+
+      if (!isValidOfficeDocument) {
+        throw new AttachmentServiceError(
+          `Invalid Office document: ${file.originalname}`,
+          400,
+          "INVALID_ATTACHMENT_TYPE",
+        );
+      }
+    }
+  }
+}
+
+// Validate the actual file contents, not just the supplied MIME type.
+export async function validateUploadedFiles(files = []) {
+  for (const file of files) {
+    const extension = path.extname(file.originalname).toLowerCase();
+
+    const expectedMime = allowedTypes[extension];
+
+    if (!expectedMime || expectedMime !== file.mimetype) {
+      throw new AttachmentServiceError(
+        `Unsupported or invalid file: ${file.originalname}`,
+        400,
+        "INVALID_ATTACHMENT_TYPE",
+      );
+    }
+
+    // TXT and CSV require content validation instead of magic signatures.
+    if (textExtensions.has(extension)) {
+      if (!validateTextFile(file.path)) {
+        throw new AttachmentServiceError(
+          `Invalid text file: ${file.originalname}`,
+          400,
+          "INVALID_ATTACHMENT_TYPE",
+        );
+      }
+
+      continue;
+    }
+
+    // Detect the actual binary file signature.
+    const detectedType = await fileTypeFromFile(file.path);
+
+    if (!detectedType || !allowedMimeTypes.has(detectedType.mime)) {
+      throw new AttachmentServiceError(
+        `Unsupported or invalid file: ${file.originalname}`,
+        400,
+        "INVALID_ATTACHMENT_TYPE",
+      );
+    }
+
+    // Office documents and ZIP archives have the same ZIP signature.
+    if (officeRequiredEntries[extension]) {
+      if (detectedType.mime !== expectedMime) {
+        throw new AttachmentServiceError(
+          `Invalid Office document: ${file.originalname}`,
+          400,
+          "INVALID_ATTACHMENT_TYPE",
+        );
+      }
+
+      const isValidOfficeDocument = await validateOfficeArchive(
+        file.path,
+        extension,
+      );
+
+      if (!isValidOfficeDocument) {
+        throw new AttachmentServiceError(
+          `Invalid Office document: ${file.originalname}`,
+          400,
+          "INVALID_ATTACHMENT_TYPE",
+        );
+      }
+
+      continue;
+    }
+
+    // For PDF, images and ordinary ZIP files, require an exact match.
+    if (detectedType.mime !== expectedMime) {
+      throw new AttachmentServiceError(
+        `File signature does not match its declared type: ${file.originalname}`,
         400,
         "INVALID_ATTACHMENT_TYPE",
       );
