@@ -1,7 +1,14 @@
-import app from "./app.js";
+import "dotenv/config";
 import { config } from "./config/config.js";
 import { db } from "./database/connection.js";
-import "./database/migrate.js";
+
+// Migrations must finish before app.js is imported. The app constructs the
+// SQLite session store, which prepares statements against the sessions table.
+await import("./database/migrate.js");
+
+const { default: app, runMaintenance } = await import("./app.js");
+
+runMaintenance();
 
 const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`Server running on port ${config.port}`);

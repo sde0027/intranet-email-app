@@ -1,33 +1,37 @@
 import express from "express";
 import { db } from "./database/connection.js";
-import "dotenv/config";
+import { config } from "./config/config.js";
+import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
+import { createLoginRateLimiter } from "./middleware/login-rate-limit.js";
 // session imports
 import session from "express-session";
 import { SQLiteSessionStore } from "./middleware/sqlite-session-store.js";
+import { cleanupExpiredTrashService } from "./modules/emails/emails.service.js";
 
 // Route imports
 import authRoutes from "./modules/auth/auth.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
+import emailsRoutes from "./modules/emails/emails.routes.js";
 
 // Auth imports
 import { authenticate } from "./middleware/authenticate.js";
 import { authorize } from "./middleware/authorize.js";
-if (!process.env.SESSION_SECRET) {
-  throw new Error("SESSION_SECRET is missing from .env");
+if (!config.sessionSecret) {
+  throw new Error("SESSION_SECRET is missing from the environment configuration.");
 }
 
 const sessionStore = new SQLiteSessionStore();
 
 const sessionMiddleware = session({
   name: "intranet.sid",
-  secret: process.env.SESSION_SECRET,
+  secret: config.sessionSecret,
   store: sessionStore,
   resave: false,
   saveUninitialized: false,
   rolling: true,
   cookie: {
     httpOnly: true,
-    secure: false, // Change to true when HTTPS is configured.
+    secure: config.cookieSecure,
     sameSite: "lax",
     maxAge: 8 * 60 * 60 * 1000,
   },
@@ -39,8 +43,13 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false }));
 // middleware
 app.use(sessionMiddleware);
-app.use("/api/auth", authRoutes);
+app.use(
+  "/api/auth",
+  createLoginRateLimiter(config.loginRateLimit),
+  authRoutes,
+);
 app.use("/api/employees", authenticate, authorize("ADMIN"), usersRoutes);
+app.use("/api/emails", emailsRoutes);
 
 app.get("/api/health", (req, res) => {
   try {
@@ -60,17 +69,36 @@ app.get("/api/health", (req, res) => {
   }
 });
 
-const cleanupTimer = setInterval(
-  () => {
-    try {
-      sessionStore.clearExpired();
-    } catch (error) {
-      console.error("Session cleanup failed:", error.message);
+// Keep unknown endpoints and unexpected errors in the same JSON API format.
+app.use("/api", notFoundHandler);
+app.use(errorHandler);
+
+function runMaintenance() {
+  // Clean expired sessions.
+  try {
+    sessionStore.clearExpired();
+  } catch (error) {
+    console.error("Session cleanup failed:", error.message);
+  }
+
+  // Permanently remove recipient associations for expired Trash items.
+  try {
+    const deletedCount = cleanupExpiredTrashService();
+
+    if (deletedCount > 0) {
+      console.log(
+        `Trash cleanup completed: ${deletedCount} expired email associations removed.`,
+      );
     }
-  },
-  60 * 60 * 1000,
-);
+  } catch (error) {
+    console.error("Trash cleanup failed:", error.message);
+  }
+}
+
+const cleanupTimer = setInterval(runMaintenance, 60 * 60 * 1000);
 
 cleanupTimer.unref();
+
+export { runMaintenance };
 
 export default app;

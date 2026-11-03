@@ -49,7 +49,13 @@ async function runTests() {
 
     console.log("PASS: Unknown email rejected");
 
-    // 4. Inactive employee
+    // 4. Malformed email types are rejected as client errors, not TypeErrors.
+    await expectLoginFailure({ email: 123, password }, 400);
+    await expectLoginFailure({ email: null, password }, 400);
+
+    console.log("PASS: Malformed email values rejected");
+
+    // 5. Inactive employee
     db.prepare(
       `
       UPDATE users SET is_active = 0 WHERE id = ?

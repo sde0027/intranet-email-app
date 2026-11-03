@@ -1,0 +1,93 @@
+import fs from "node:fs";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import multer from "multer";
+import { config } from "../../config/config.js";
+
+export const attachmentDirectory = path.join(
+  config.database.directory,
+  "attachments",
+);
+
+fs.mkdirSync(attachmentDirectory, { recursive: true });
+
+// Extension-to-MIME mapping.
+// This is the single source of truth for allowed attachment types.
+export const allowedTypes = {
+  ".pdf": "application/pdf",
+
+  ".txt": "text/plain",
+  ".csv": "text/csv",
+
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+  ".pptx":
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+
+  ".zip": "application/zip",
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, callback) => {
+    callback(null, attachmentDirectory);
+  },
+
+  filename: (req, file, callback) => {
+    callback(null, randomUUID());
+  },
+});
+
+const upload = multer({
+  storage,
+
+  limits: {
+    fileSize: 30 * 1024 * 1024,
+    files: 5,
+  },
+
+  fileFilter: (req, file, callback) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+
+    if (allowedTypes[extension] !== file.mimetype) {
+      return callback(new Error("Unsupported file extension or MIME type."));
+    }
+
+    callback(null, true);
+  },
+});
+
+export function uploadAttachments(req, res, next) {
+  upload.array("attachments", 5)(req, res, (error) => {
+    if (!error) {
+      return next();
+    }
+
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({
+        error: "Each attachment must be 30 MB or smaller.",
+      });
+    }
+
+    if (
+      error.code === "LIMIT_FILE_COUNT" ||
+      error.code === "LIMIT_UNEXPECTED_FILE"
+    ) {
+      return res.status(400).json({
+        error: "Maximum of 5 attachments is allowed.",
+      });
+    }
+
+    return res.status(400).json({
+      error: error.message || "Invalid attachment upload.",
+    });
+  });
+}

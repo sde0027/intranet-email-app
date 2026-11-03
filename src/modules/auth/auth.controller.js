@@ -32,3 +32,19 @@ export async function loginController(req, res, next) {
     next(error);
   }
 }
+
+export function logoutController(req, res, next) {
+  req.session.destroy((error) => {
+    if (error) {
+      return next(error);
+    }
+
+    res.clearCookie("intranet.sid", {
+      path: "/",
+    });
+
+    return res.status(200).json({
+      message: "Logout successful.",
+    });
+  });
+}
