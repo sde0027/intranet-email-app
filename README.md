@@ -1,10 +1,10 @@
-# Intranet Mail Application
+# Intranet Email Application
 
-A self-hosted, internal email communication system designed for organizations to facilitate secure communication between employees through a centralized application.
+A self-hosted internal email communication platform designed for organizations that need centralized communication between employees over a local network.
 
-The project aims to provide essential email functionality, including user authentication, message composition, inbox and sent-mail management, recipient handling, and eventually attachments, all within an organization's local network.
+The application provides user authentication, employee management, internal email communication, recipient management, attachments, drafts, message organization and session management.
 
-> **Development Status:** Backend MVP — Core authentication and email workflows implemented and tested. Frontend development is pending.
+> **Development Status:** Backend implementation and verification completed. Frontend development is the next phase.
 
 ---
 
@@ -21,7 +21,8 @@ The project aims to provide essential email functionality, including user authen
 - [API Overview](#api-overview)
 - [Getting Started](#getting-started)
 - [Running the Application](#running-the-application)
-- [Testing](#testing)
+- [Testing and Verification](#testing-and-verification)
+- [Deployment](#deployment)
 - [Development Roadmap](#development-roadmap)
 - [Design Decisions](#design-decisions)
 - [Limitations](#limitations)
@@ -31,58 +32,65 @@ The project aims to provide essential email functionality, including user authen
 
 ## Overview
 
-The Intranet Mail Application is a web-based internal messaging platform intended for organizations that require a centralized communication system accessible within their internal network.
+The Intranet Email Application is a web-based internal messaging platform intended for organizations that require centralized communication between registered employees.
 
-Unlike conventional email services that depend on external email providers, this application focuses on communication between registered users within a controlled organizational environment.
+Unlike conventional email services that depend on external email providers, this application focuses on communication within a controlled organizational environment.
 
-The application follows a modular monolithic architecture, keeping the system straightforward to develop, maintain, and deploy while maintaining separation of responsibilities across its modules.
+The application follows a **modular monolithic architecture**, keeping development and deployment straightforward while separating responsibilities across logical modules.
 
 ### Core Concept
 
-- Administrators manage the initial user registration process.
-- Registered employees authenticate using their credentials.
-- Authenticated users can compose and send messages to other registered employees.
-- Messages are delivered to the respective recipients' inboxes.
-- Users can access their sent messages and manage their email conversations.
+- Administrators manage employee accounts.
+- Employees authenticate using their registered credentials.
+- Authenticated users can compose and send messages to other employees.
+- Messages are delivered to recipients' inboxes.
+- Users can manage drafts, read/unread status, replies, forwards and deleted messages.
+- Attachments are stored locally and protected by access-control checks.
+- Application data remains under the organization's infrastructure.
 
 ---
 
 ## Project Objectives
 
 1. Develop a centralized internal communication platform.
-2. Implement secure user authentication and session management.
+2. Implement secure authentication and session management.
 3. Support communication between individual employees and multiple recipients.
 4. Maintain independent recipient-specific message states.
 5. Provide efficient inbox and sent-message retrieval with pagination.
-6. Keep application data and attachments under local infrastructure control.
-7. Build a maintainable backend that can support future frontend development and additional features.
+6. Support attachments and local file storage.
+7. Implement message lifecycle operations, including drafts, replies, forwarding and Trash.
+8. Keep application data under local infrastructure control.
+9. Build a maintainable backend that supports future frontend integration.
 
 ---
 
 ## Technology Stack
 
-| Component                   | Technology                                |
-| --------------------------- | ----------------------------------------- |
-| Frontend                    | HTML5, CSS3, Vanilla JavaScript           |
-| CSS Framework               | Tailwind CSS (planned for UI development) |
-| Backend Runtime             | Node.js                                   |
-| Backend Framework           | Express.js 5                              |
-| Database                    | SQLite                                    |
-| Database Driver             | better-sqlite3                            |
-| Authentication              | express-session                           |
-| Password Hashing            | Argon2                                    |
-| Configuration               | dotenv                                    |
-| Frontend Development Server | Vite                                      |
-| API Testing                 | Postman                                   |
-| Version Control             | Git and GitHub                            |
+| Component | Technology |
+|---|---|
+| Frontend | HTML5, CSS3, Vanilla JavaScript |
+| CSS Framework | Tailwind CSS |
+| Frontend Development Server | Vite |
+| Backend Runtime | Node.js |
+| Backend Framework | Express.js 5 |
+| Database | SQLite |
+| Database Driver | better-sqlite3 |
+| Authentication | express-session |
+| Session Storage | Custom SQLite session store |
+| Password Hashing | Argon2 |
+| File Upload | Multer |
+| File Signature Validation | file-type |
+| Configuration | dotenv |
+| API Testing | Postman |
+| Version Control | Git and GitHub |
 
 ### Architectural Approach
 
 The application uses a **modular monolithic architecture**.
 
-Instead of introducing unnecessary distributed services, the backend operates as a single application while keeping individual responsibilities separated into logical modules.
+The backend operates as a single application while separating authentication, employee management, email operations, attachment handling, database operations and middleware into independent modules.
 
-SQLite serves as the persistent database, making the application suitable for local deployment without requiring an external database server.
+SQLite provides persistent relational storage without requiring a separately managed database server.
 
 ---
 
@@ -91,52 +99,69 @@ SQLite serves as the persistent database, making the application suitable for lo
 The application follows a client-server architecture.
 
 ```text
-              Client (Web Browser)
+                 Web Browser
                       |
                       |
                  HTTP Requests
                       |
                       v
-              Express.js Server
+                Express.js
                       |
           +-----------+-----------+
           |           |           |
           v           v           v
-      Authentication Users     Emails
-          Module      Module    Module
+     Authentication  Users      Emails
+        Module       Module     Module
+          |           |           |
+          |           |       Attachments
+          |           |         Module
           |           |           |
           +-----------+-----------+
                       |
                       v
-                 SQLite DB
+                 SQLite Database
                       |
           +-----------+-----------+
           |                       |
           v                       v
-      Database                Migrations
-      Operations              and Schema
+      Database                Migration
+      Operations               System
+                      |
+                      v
+              Local File Storage
+                (Attachments)
 ```
 
 ### Architectural Responsibilities
 
-| Layer            | Responsibility                                  |
-| ---------------- | ----------------------------------------------- |
-| Frontend         | User interaction and presentation               |
-| Express Server   | HTTP request handling and routing               |
-| Authentication   | Login, sessions, and access control             |
-| User Module      | Employee account management                     |
-| Email Module     | Message composition, delivery, and retrieval    |
-| Database Layer   | Persistent data storage and SQL operations      |
+| Layer | Responsibility |
+|---|---|
+| Frontend | User interaction and presentation |
+| Express Server | HTTP request handling and routing |
+| Authentication | Login, logout and session lifecycle |
+| Authorization | Role-based access control |
+| User Module | Employee account management |
+| Email Module | Message composition, delivery and retrieval |
+| Attachment Module | File validation, storage and download |
+| Middleware | Authentication, authorization and error handling |
+| Database Layer | Persistent data storage and SQL operations |
 | Migration System | Database schema creation and version management |
 
 ---
 
 ## Project Structure
 
-The current project structure is organized as follows:
+The project is organized into the following logical components:
 
 ```text
-intranet-mail-app/
+intranet-email-app/
+│
+├── data/
+│   ├── intranet-email.sqlite
+│   └── attachments/
+│
+├── public/
+│   └── assets/
 │
 ├── src/
 │   │
@@ -148,75 +173,171 @@ intranet-mail-app/
 │   │
 │   ├── database/
 │   │   ├── connection.js
+│   │   ├── migrate.js
 │   │   └── migrations/
 │   │       ├── 001-initial-schema.sql
-│   │       └── 002-sessions.sql
+│   │       ├── 002-sessions.sql
+│   │       └── 003-trash-retention.sql
+│   │
+│   ├── middleware/
+│   │   ├── authenticate.js
+│   │   ├── authorize.js
+│   │   ├── error-handler.js
+│   │   ├── login-rate-limit.js
+│   │   └── sqlite-session-store.js
+│   │
+│   ├── modules/
+│   │   ├── auth/
+│   │   │   ├── auth.controller.js
+│   │   │   ├── auth.routes.js
+│   │   │   └── auth.service.js
+│   │   │
+│   │   ├── users/
+│   │   │   ├── users.controller.js
+│   │   │   ├── users.routes.js
+│   │   │   └── users.service.js
+│   │   │
+│   │   ├── emails/
+│   │   │   ├── emails.controller.js
+│   │   │   ├── emails.routes.js
+│   │   │   └── emails.service.js
+│   │   │
+│   │   └── attachments/
+│   │       ├── attachments.controller.js
+│   │       ├── attachments.routes.js
+│   │       ├── attachments.service.js
+│   │       └── attachments.storage.js
 │   │
 │   └── frontend/
 │       ├── css/
 │       │   └── style.css
-│       │
 │       └── js/
+│
+├── tests/
 │
 ├── index.html
 ├── package.json
 ├── package-lock.json
 ├── vite.config.js
+├── .env.example
 ├── .gitignore
 └── README.md
 ```
 
-The structure may evolve as additional modules and frontend functionality are introduced.
+*Note: The tree describes the main project components; individual frontend pages, test files and supporting utilities may evolve during development.*
+
+The `data/` directory contains persistent application data and must be preserved when updating the application.
 
 ---
 
 ## Implemented Features
 
-The following functionality has been implemented and tested.
+The backend functionality has been implemented and verified through API testing.
 
 ### 1. Authentication and User Management
 
 - Administrator registration.
+- Employee account creation.
 - User login and authentication.
 - Password hashing using Argon2.
 - Server-managed sessions.
-- Persistent session storage.
-- Authentication middleware for protected operations.
-- Session-based access control.
+- Persistent session storage using SQLite.
+- Session regeneration during authentication.
+- Session destruction during logout.
+- HTTP-only session cookies.
+- Authentication middleware.
+- Role-based authorization for ADMIN and EMPLOYEE accounts.
+- Active-account validation.
+- Login rate limiting.
 
 ### 2. Email Management
 
-- Compose and send messages.
-- Send messages to individual employees.
-- Support multiple recipients.
-- Maintain sender and recipient relationships.
+- Compose and send internal messages.
+- Send messages to multiple employees.
+- Support TO, CC and BCC recipients.
 - Retrieve inbox messages.
 - Retrieve sent messages.
+- Retrieve individual email details.
 - Paginated message retrieval.
+- Sender and recipient relationships.
+- Recipient-specific read/unread status.
 
-### 3. Database and Persistence
+### 3. Draft Management
+
+- Create drafts.
+- Retrieve all drafts belonging to the authenticated user.
+- Retrieve individual drafts.
+- Update existing drafts.
+- Delete drafts.
+- Restrict draft access to their owner.
+
+Drafts are stored separately from sent messages using the email status field.
+
+### 4. Reply and Forward
+
+- Reply to an individual sender.
+- Reply to all visible original recipients.
+- Forward messages to other employees.
+- Maintain message relationships through parent email references.
+- Support attachments in reply and forward operations.
+- Exclude BCC recipients from reply-all recipient lists.
+
+### 5. Attachment Management
+
+- Upload attachments with email messages.
+- Validate permitted file extensions and MIME types.
+- Verify actual file signatures.
+- Store uploaded files locally.
+- Store attachment metadata in SQLite.
+- Retrieve attachment metadata.
+- Download attachments with access-control validation.
+- Restrict access to authorized senders and recipients.
+- Clean up uploaded files when validation or database operations fail.
+
+Current upload restrictions:
+
+- Maximum file size: 30 MB per file.
+- Maximum number of files: 5 per request.
+- Supported extensions: PDF, JPG, JPEG, PNG, GIF and WEBP.
+
+### 6. Read/Unread Management
+
+- Mark messages as read.
+- Mark messages as unread.
+- Retrieve unread-message counts.
+- Maintain read status independently for each recipient.
+
+### 7. Trash and Message Retention
+
+- Move messages to Trash.
+- Restore messages from Trash.
+- Permanently delete a user's recipient association.
+- Maintain independent Trash state for each recipient.
+- Automatically expire Trash entries after 30 days.
+- Preserve attachment access while the user's recipient association exists.
+
+Deleting a message from one employee's mailbox does not delete it from other employees' mailboxes.
+
+### 8. Database and Persistence
 
 - SQLite database integration.
 - Migration-based schema management.
-- Separate session persistence.
-- Persistent storage of user and email records.
-- Recipient-specific email records.
+- Persistent session storage.
+- Foreign-key enforcement.
+- WAL journal mode.
+- Parameterized SQL queries.
 - Transactional message creation and recipient assignment.
+- Indexed inbox, sent-message and attachment lookups.
+- Consistent UTC timestamps.
 
-### 4. Testing and Verification
+### 9. Maintenance and Error Handling
 
-The following workflows have been manually tested using Postman:
-
-- Successful administrator registration.
-- Successful authentication.
-- Creation of additional user accounts.
-- Sending messages between multiple accounts.
-- Retrieving inbox and sent messages.
-- Exchanging messages between multiple users.
-- Verifying pagination behavior.
-- Confirming persistence across application requests.
-
-**Current verification status:** The implemented authentication and email workflows are functioning as expected in the local development environment.
+- Centralized JSON error handling.
+- JSON responses for unknown API endpoints.
+- Automatic expired-session cleanup.
+- Automatic expired-Trash cleanup.
+- Startup maintenance execution.
+- Scheduled maintenance during server operation.
 
 ---
 
@@ -224,71 +345,151 @@ The following workflows have been manually tested using Postman:
 
 The application uses SQLite as its relational database.
 
-Database schema changes are managed through SQL migration files rather than being created manually during application execution.
+Database schema changes are managed through versioned SQL migration files.
 
 ### Current Migrations
 
-| Migration                | Responsibility                      |
-| ------------------------ | ----------------------------------- |
-| `001-initial-schema.sql` | Initial application database schema |
-| `002-sessions.sql`       | Persistent session storage          |
+| Migration | Responsibility |
+|---|---|
+| `001-initial-schema.sql` | Initial application schema |
+| `002-sessions.sql` | Persistent session storage |
+| `003-trash-retention.sql` | Recipient-specific Trash retention |
 
 ### Core Database Entities
 
-The database design separates message information from recipient-specific information.
+| Entity | Responsibility |
+|---|---|
+| Users | Stores registered employee accounts |
+| Emails | Stores message information |
+| Email Recipients | Maintains recipient relationships and individual message state |
+| Attachments | Stores attachment metadata |
+| Sessions | Stores persistent authentication sessions |
 
-| Entity           | Responsibility                                                       |
-| ---------------- | -------------------------------------------------------------------- |
-| Users            | Stores registered employee accounts                                  |
-| Emails           | Stores message information                                           |
-| Email Recipients | Maintains recipient relationships and individual message state       |
-| Attachments      | Reserved for attachment metadata and future attachment functionality |
-| Sessions         | Stores persistent authentication sessions                            |
+### Important Database Design Decisions
 
-This separation allows a single message to be associated with multiple recipients without duplicating the original message content.
+**Recipient-specific message state**
 
-It also provides a foundation for recipient-specific operations such as read/unread status and message management.
+A single email can have multiple recipient records. This allows each recipient to maintain independent read/unread and Trash states.
+
+**Transactional sending**
+
+Creating an email, inserting recipient records and registering attachment metadata are handled transactionally to maintain database consistency.
+
+**Attachment storage separation**
+
+The database stores attachment metadata, while actual files are stored on the local filesystem.
+
+**Migration-based schema management**
+
+Existing migrations are tracked and are not reapplied during subsequent application startups.
 
 ---
 
 ## Authentication and Security
 
-Security is considered at the backend level from the beginning of development.
+Security is implemented at the backend level.
 
-Current security-related implementations include:
+Current security measures include:
 
-- Argon2 password hashing instead of storing plaintext passwords.
-- Session-based authentication.
+- Argon2 password hashing.
+- Server-side session authentication.
+- Persistent SQLite session storage.
+- Session regeneration after login.
+- Session destruction during logout.
 - HTTP-only session cookies.
-- Persistent server-side session storage.
-- Protected backend operations.
+- Configurable cookie security.
+- Role-based authorization.
+- Active-account checks.
+- Login rate limiting.
 - Parameterized SQL queries.
-- Database foreign-key enforcement.
-- Transactional handling of message creation.
+- SQLite foreign-key enforcement.
+- Attachment signature validation.
+- Attachment access-control checks.
+- Centralized error handling.
 
-The application does not store user passwords in plaintext or expose password hashes through successful authentication responses.
+### Session Configuration
 
-Further security hardening, including deployment-specific cookie configuration, CSRF protection, rate limiting, and additional authorization checks, remains part of the development roadmap.
+The session cookie is named:
+
+```text
+intranet.sid
+```
+
+The default session lifetime is eight hours.
+
+### Login Rate Limiting
+
+The login endpoint has an in-memory rate limiter.
+
+Default configuration:
+
+- Maximum attempts: 10.
+- Time window: 15 minutes.
+- Scope: Client IP address.
+
+Rate-limit counters reset when the server process restarts. This implementation is intended for the current single-server deployment.
+
+### Transport Security
+
+The current deployment uses HTTP within the controlled local network.
+
+HTTPS is deferred for the current development stage.
+
+**Important:** HTTP does not encrypt credentials or session cookies in transit. HTTPS should be configured before exposing the application to a production environment where transport confidentiality is required.
 
 ---
 
 ## API Overview
 
-The backend exposes REST-style HTTP endpoints for application functionality.
+The backend exposes REST-style HTTP endpoints.
 
-The API currently covers the following functional areas:
+The API is organized into the following functional areas:
 
-| Module         | Functionality                                             |
-| -------------- | --------------------------------------------------------- |
-| Authentication | Administrator registration, login, session authentication |
-| Users          | Employee account creation and user management             |
-| Emails         | Message composition and sending                           |
-| Inbox          | Retrieving received messages                              |
-| Sent           | Retrieving messages sent by the authenticated user        |
+| Module | Functionality |
+|---|---|
+| Authentication | Registration, login and logout |
+| Users | Employee account management |
+| Emails | Message composition and sending |
+| Inbox | Retrieving received messages |
+| Sent | Retrieving sent messages |
+| Drafts | Creating and managing drafts |
+| Read/Unread | Managing recipient-specific message state |
+| Replies and Forwarding | Reply, reply-all and forward |
+| Attachments | Uploading, listing and downloading files |
+| Trash | Moving, restoring and permanently deleting messages |
 
-Message retrieval supports pagination.
+### Important Email Endpoints
 
-For the complete endpoint definitions, request payloads, response structures, and authentication requirements, refer to the backend implementation.
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/emails/send` | Send an email |
+| GET | `/api/emails/inbox` | Retrieve inbox messages |
+| GET | `/api/emails/sent` | Retrieve sent messages |
+| GET | `/api/emails/drafts` | Retrieve drafts |
+| POST | `/api/emails/drafts` | Create a draft |
+| GET | `/api/emails/drafts/:id` | Retrieve an individual draft |
+| PATCH | `/api/emails/drafts/:id` | Update a draft |
+| DELETE | `/api/emails/drafts/:id` | Delete a draft |
+| GET | `/api/emails/unread-count` | Retrieve unread count |
+| GET | `/api/emails/:id` | Retrieve an individual email |
+| PATCH | `/api/emails/:id/read` | Mark as read |
+| PATCH | `/api/emails/:id/unread` | Mark as unread |
+| POST | `/api/emails/:id/reply` | Reply |
+| POST | `/api/emails/:id/reply-all` | Reply to all |
+| POST | `/api/emails/:id/forward` | Forward |
+| GET | `/api/emails/trash` | Retrieve Trash |
+| DELETE | `/api/emails/:id` | Move to Trash |
+| PATCH | `/api/emails/:id/restore` | Restore from Trash |
+| DELETE | `/api/emails/:id/permanent` | Permanently delete from Trash |
+
+Authentication endpoints include:
+
+```text
+POST /api/auth/login
+POST /api/auth/logout
+```
+
+The complete route definitions, request payloads and response structures are maintained in the corresponding route and controller files.
 
 ---
 
@@ -296,11 +497,11 @@ For the complete endpoint definitions, request payloads, response structures, an
 
 ### Prerequisites
 
-Install the following before running the application:
+Install the following:
 
 - [Node.js](https://nodejs.org/)
 - npm (included with Node.js)
-- Git (optional, for cloning the repository)
+- Git (optional)
 
 No external database server is required.
 
@@ -326,34 +527,67 @@ npm install
 
 Create a `.env` file in the project root.
 
-Refer to `src/config/config.js` for the environment variables and configuration values required by the application.
+Use `.env.example` as a reference.
 
-Keep sensitive configuration values out of version control.
+Example configuration:
+
+```env
+PORT=3000
+SESSION_SECRET=replace-with-a-strong-random-secret
+
+COOKIE_SECURE=false
+
+LOGIN_RATE_LIMIT_MAX=10
+LOGIN_RATE_LIMIT_WINDOW_MS=900000
+```
+
+Configuration notes:
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | Backend server port |
+| `SESSION_SECRET` | Secret used for session signing |
+| `COOKIE_SECURE` | Enables Secure cookie behaviour when HTTPS is configured |
+| `LOGIN_RATE_LIMIT_MAX` | Maximum login attempts per IP |
+| `LOGIN_RATE_LIMIT_WINDOW_MS` | Login rate-limit window in milliseconds |
+
+Keep `.env` out of version control.
+
+Do not replace an existing session secret unnecessarily. Changing it invalidates existing login sessions.
 
 ### 4. Start the Backend
 
-Run the backend server using:
-
 ```bash
-node src/server.js
+npm run server
 ```
 
-On startup, the application initializes the database connection and executes any pending migrations.
+The application:
 
-Expected startup output:
+1. Loads environment configuration.
+2. Initializes the SQLite database connection.
+3. Executes pending database migrations.
+4. Initializes application middleware and routes.
+5. Runs startup maintenance.
+6. Starts the Express server.
+
+Expected output:
 
 ```text
 Database migrations complete.
 Server running on port 3000
 ```
 
-The application exposes a health-check endpoint at:
+### 5. Verify the Backend
+
+Open:
 
 ```text
 http://localhost:3000/api/health
 ```
 
-### 5. Start the Frontend Development Server
+The health endpoint should report that the server is operational and the database is connected.
+
+### 6. Start the Frontend Development Server
 
 In a separate terminal:
 
@@ -363,104 +597,240 @@ npm run dev
 
 Vite starts the frontend development server.
 
+The frontend is currently pending development and integration.
+
 ---
 
-## Testing
+## Testing and Verification
 
-Postman is currently used for backend API testing.
+Postman has been used to verify the backend independently of the frontend.
 
-The implemented backend workflows have been tested independently of the frontend.
+### Authentication and Authorization
 
-Testing currently covers:
+- Administrator registration.
+- Successful login.
+- Invalid credential handling.
+- Session creation and persistence.
+- Session expiration.
+- Logout and session destruction.
+- Unauthorized access rejection.
+- Role-based authorization.
+- Login rate limiting.
 
-- Authentication and session creation.
-- User registration.
-- Message sending.
-- Multiple-recipient workflows.
+### Email Workflows
+
+- Sending messages between multiple accounts.
+- TO, CC and BCC recipient handling.
 - Inbox and sent-message retrieval.
 - Pagination.
-- Communication between multiple registered accounts.
+- Draft creation, retrieval, update and deletion.
+- Individual email retrieval.
+- Read/unread operations.
+- Reply, reply-all and forward.
+- Trash, restore and permanent deletion.
+- Automatic Trash expiration.
 
-Automated integration and unit test coverage is a future improvement.
+### Attachment Verification
+
+The following attachment tests passed:
+
+- File upload.
+- Attachment metadata retrieval.
+- Attachment download.
+- Unauthorized download rejection.
+- Invalid file-signature rejection.
+- Cleanup after failed email sending.
+
+### Regression Testing
+
+The critical email and authentication workflows were re-tested after the security and error-handling changes.
+
+The regression checks passed, including session isolation between different users.
+
+### Deployment Verification
+
+The following operational checks passed:
+
+- Server startup and restart.
+- Local network accessibility.
+- Database and attachment backup.
+- Recovery verification using a separate test copy.
+
+HTTPS remains deferred.
+
+---
+
+## Deployment
+
+The application is intended to run on a computer within the organization's local network.
+
+### Local Network Access
+
+The backend must listen on a network-accessible interface rather than only the loopback interface.
+
+Find the host computer's IPv4 address:
+
+```powershell
+ipconfig
+```
+
+For example, if the host address is `192.168.1.10`, another computer on the same network can access:
+
+```text
+http://192.168.1.10:3000/api/health
+```
+
+Windows Firewall must allow the required inbound connection.
+
+### Persistent Data
+
+The following resources must be backed up together:
+
+```text
+data/
+├── intranet-email.sqlite
+└── attachments/
+```
+
+The actual database filename is determined by application configuration.
+
+For a straightforward consistent backup, stop the backend before copying the entire data directory.
+
+### Deployment Considerations
+
+- Use a stable host computer.
+- Keep the database and attachment directory on persistent local storage.
+- Restrict network access to the intended company network.
+- Preserve the session secret.
+- Use appropriate Windows Firewall rules.
+- Maintain regular backups.
+- Test database and attachment recovery.
+- Configure HTTPS before production use.
 
 ---
 
 ## Development Roadmap
 
-The project is being developed incrementally, with backend functionality established before frontend integration.
+Development is organized into distinct phases.
 
-### Completed
+### Phase 1 — Backend Development
 
 - [x] Project initialization.
 - [x] Node.js and Express.js setup.
 - [x] SQLite database integration.
-- [x] Database migration system.
+- [x] Migration system.
 - [x] Persistent session storage.
 - [x] Administrator registration.
-- [x] User authentication.
-- [x] Password hashing.
-- [x] Session-based authentication.
-- [x] User account creation.
+- [x] Employee account management.
+- [x] Authentication and authorization.
+- [x] Login rate limiting.
 - [x] Email composition and sending.
 - [x] Multiple-recipient support.
-- [x] Inbox retrieval.
-- [x] Sent-message retrieval.
+- [x] Inbox and sent-message retrieval.
 - [x] Pagination.
-- [x] Postman workflow testing.
+- [x] Draft management.
+- [x] Read/unread functionality.
+- [x] Reply and reply-all.
+- [x] Forwarding.
+- [x] Attachment upload and download.
+- [x] Attachment access control and cleanup.
+- [x] Trash and restore.
+- [x] Automatic Trash retention cleanup.
+- [x] Individual email retrieval.
+- [x] Logout.
+- [x] Centralized error handling.
+- [x] Backend regression testing.
+- [x] Deployment and recovery verification.
 
-### Pending Development
+### Phase 2 — Frontend Development
 
-- [ ] Frontend application development.
-- [ ] Login and registration interfaces.
-- [ ] Inbox and sent-mail interfaces.
-- [ ] Email composition interface.
-- [ ] Draft management.
-- [ ] Read/unread message functionality.
-- [ ] Reply and forward functionality.
-- [ ] File attachment upload and download.
+- [ ] Authentication interfaces.
+- [ ] Admin and employee sign-in experience.
+- [ ] Application layout and navigation.
+- [ ] Dashboard.
+- [ ] Inbox interface.
+- [ ] Individual email viewer.
+- [ ] Compose email interface.
+- [ ] TO, CC and BCC recipient selection.
+- [ ] Attachment selection and upload.
+- [ ] Sent messages interface.
+- [ ] Draft management interface.
+- [ ] Read/unread indicators.
+- [ ] Reply and forwarding interface.
+- [ ] Trash and restore interface.
+- [ ] Employee management interface.
 - [ ] Frontend and backend integration.
-- [ ] Automated testing.
-- [ ] Deployment and local network accessibility.
-- [ ] Final security hardening.
+- [ ] Responsive design and usability testing.
+
+### Phase 3 — Final Integration and Release
+
+- [ ] End-to-end application testing.
+- [ ] Cross-browser verification.
+- [ ] Final security review.
+- [ ] Operational documentation.
+- [ ] Deployment configuration.
+- [ ] Backup and recovery procedures.
+- [ ] Production deployment.
 
 ---
 
 ## Design Decisions
 
-A few architectural decisions guide the development of this project:
+### 1. SQLite Instead of an External Database Server
 
-**1. SQLite instead of an external database server**
+SQLite provides persistent relational storage without requiring a separately managed database service.
 
-SQLite provides persistent relational storage without requiring a separately managed database service. This keeps initial deployment simple.
+This keeps deployment straightforward for the intended small internal environment.
 
-**2. Modular monolithic architecture**
+### 2. Modular Monolithic Architecture
 
-A modular monolith provides separation of responsibilities without introducing the operational complexity of microservices.
+A modular monolith separates responsibilities without introducing unnecessary distributed-system complexity.
 
-**3. Server-managed sessions**
+### 3. Server-Managed Sessions
 
-Authentication is based on server-side sessions rather than stateless token-based authentication.
+Authentication uses server-side sessions rather than stateless token-based authentication.
 
-**4. Migration-based database management**
+This provides centralized session invalidation and persistent session management.
 
-Database schema changes are versioned and applied through migration files, providing a predictable database initialization process.
+### 4. Recipient-Specific Message State
 
-**5. Backend-first development**
+Recipient associations maintain independent read/unread and Trash states.
 
-Core application logic and persistence are implemented and tested before building the frontend. This allows API functionality to be verified independently.
+Deleting a message from one mailbox does not automatically delete it from other recipients' mailboxes.
+
+### 5. Local Attachment Storage
+
+Attachment metadata is stored in SQLite, while the actual files remain on the local filesystem.
+
+This avoids dependence on external file-storage services.
+
+### 6. Migration-Based Database Management
+
+Database schema changes are versioned and applied through migration files.
+
+Existing data is preserved across normal application restarts.
+
+### 7. Backend-First Development
+
+Core application logic and persistence were implemented and verified before frontend development.
+
+This allows frontend functionality to be built on top of established APIs.
 
 ---
 
 ## Limitations
 
-The current implementation is an MVP and is not yet a production-ready enterprise email server.
+The backend MVP is implemented, but the complete application is not yet finished.
 
-- The frontend is not yet implemented.
-- The application is designed for internal communication between registered users, not communication with external email providers.
+Current limitations include:
+
+- Frontend interfaces are pending development.
+- The application supports internal communication between registered employees, not external email providers.
 - SMTP integration and external email delivery are outside the current scope.
-- File attachment workflows are not yet implemented.
-- Deployment and multi-user network access have not yet been verified.
-- Additional security hardening and automated testing are required before production deployment.
+- HTTPS has been deferred for the current development environment.
+- Login rate limiting uses in-memory storage and resets when the server restarts.
+- The current deployment is intended for a single application server.
+- Automated end-to-end frontend testing remains pending.
 
 ---
 
@@ -470,6 +840,6 @@ License information will be added once the project licensing decision has been f
 
 ---
 
-**Project Status:** Active Development
+**Project Status:** Backend Complete — Frontend Development Pending.
 
-Built as a practical exploration of backend engineering, relational database design, authentication, REST API development, and full-stack application architecture.
+Built as a practical exploration of backend engineering, relational database design, authentication, session management, REST API development, file handling and full-stack application architecture.
