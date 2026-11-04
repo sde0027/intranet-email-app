@@ -6,6 +6,7 @@ export const updateEmployeeStatus = (id, is_active) => apiRequest(`/employees/${
 export const updateEmployeeProfile = (id, data) => {
   const body = new FormData();
   body.append("name", data.name);
+  body.append("email", data.email);
   body.append("designation", data.designation);
   body.append("phone", data.phone);
   if (data.profile_photo) body.append("profile_photo", data.profile_photo);

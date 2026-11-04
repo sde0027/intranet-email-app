@@ -183,7 +183,7 @@ All endpoints below require an authenticated active account. All paths are under
 
 Inbox, sent, drafts, and Trash accept `page` and `limit` query parameters.
 
-- Defaults: `page=1`, `limit=20`.
+- Defaults: `page=1`, `limit=50`.
 - Both must be positive integers.
 - Maximum `limit`: 100.
 - Invalid values return `400`.
@@ -194,7 +194,7 @@ Inbox, sent, drafts, and Trash accept `page` and `limit` query parameters.
   "messages": [],
   "pagination": {
     "page": 1,
-    "limit": 20,
+    "limit": 50,
     "total": 0,
     "totalPages": 0,
     "hasNextPage": false,

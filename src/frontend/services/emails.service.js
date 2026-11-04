@@ -1,5 +1,5 @@
 import { apiRequest, jsonBody } from "./api.js";
-const query = (page = 1, limit = 20) => `?page=${page}&limit=${limit}`;
+const query = (page = 1, limit = 50) => `?page=${page}&limit=${limit}`;
 export const getInbox = (page) => apiRequest(`/emails/inbox${query(page)}`);
 export const getSent = (page) => apiRequest(`/emails/sent${query(page)}`);
 export const getTrash = (page) => apiRequest(`/emails/trash${query(page)}`);

@@ -107,7 +107,7 @@ export function getInbox(req, res) {
     const userId = req.user.id;
 
     const page = req.query.page ?? "1";
-    const limit = req.query.limit ?? "20";
+    const limit = req.query.limit ?? "50";
 
     // Validate pagination parameters.
     if (
@@ -162,7 +162,7 @@ export function getSent(req, res) {
     const userId = req.user.id;
 
     const page = req.query.page ?? "1";
-    const limit = req.query.limit ?? "20";
+    const limit = req.query.limit ?? "50";
 
     if (
       typeof page !== "string" ||
@@ -255,7 +255,7 @@ function parseDraftId(value) {
 
 function parsePagination(query) {
   const page = query.page ?? "1";
-  const limit = query.limit ?? "20";
+  const limit = query.limit ?? "50";
 
   if (
     typeof page !== "string" ||
