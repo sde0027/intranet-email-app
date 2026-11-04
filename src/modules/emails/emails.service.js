@@ -1069,6 +1069,39 @@ export function moveEmailToTrashService({ emailId, recipientId }) {
   return { id: emailId, is_deleted: 1 };
 }
 
+// Move multiple inbox entries to Trash atomically for the current recipient.
+export function bulkMoveEmailToTrashService({ emailIds, recipientId }) {
+  const placeholders = emailIds.map(() => "?").join(", ");
+  const moveSelected = db.prepare(`
+    UPDATE email_recipients
+    SET
+      is_deleted = 1,
+      deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE recipient_id = ?
+      AND email_id IN (${placeholders})
+      AND is_deleted = 0
+      AND EXISTS (
+        SELECT 1 FROM emails
+        WHERE emails.id = email_recipients.email_id
+          AND emails.status = 'SENT'
+      )
+  `);
+
+  const transaction = db.transaction(() => {
+    const result = moveSelected.run(recipientId, ...emailIds);
+    if (result.changes !== emailIds.length) {
+      throw new EmailServiceError(
+        "One or more selected messages are no longer available in your inbox. Refresh and try again.",
+        409,
+        "BULK_TRASH_CONFLICT",
+      );
+    }
+    return { moved: result.changes };
+  });
+
+  return transaction();
+}
+
 // Retrieve the current user's Trash with pagination.
 export function getTrashService({ userId, page, limit }) {
   const offset = (page - 1) * limit;

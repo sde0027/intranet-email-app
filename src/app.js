@@ -5,7 +5,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { createLoginRateLimiter } from "./middleware/login-rate-limit.js";
 // session imports
 import session from "express-session";
-import { SQLiteSessionStore } from "./middleware/sqlite-session-store.js";
+import { SQLiteSessionStore, SESSION_TTL_MS } from "./middleware/sqlite-session-store.js";
 import { cleanupExpiredTrashService } from "./modules/emails/emails.service.js";
 import { cleanupOrphanedProfilePhotos } from "./modules/users/users.service.js";
 
@@ -28,12 +28,12 @@ const sessionMiddleware = session({
   store: sessionStore,
   resave: false,
   saveUninitialized: false,
-  rolling: true,
+  rolling: false,
   cookie: {
     httpOnly: true,
     secure: config.cookieSecure,
     sameSite: "lax",
-    maxAge: 8 * 60 * 60 * 1000,
+    maxAge: SESSION_TTL_MS,
   },
 });
 

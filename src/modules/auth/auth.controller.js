@@ -1,4 +1,5 @@
 import { login } from "./auth.service.js";
+import { SESSION_TTL_MS } from "../../middleware/sqlite-session-store.js";
 
 export async function loginController(req, res, next) {
   try {
@@ -16,6 +17,10 @@ export async function loginController(req, res, next) {
         role: user.role,
       };
 
+      // Set one fixed deadline. Requests and user activity never extend it.
+      req.session.authExpiresAt = Date.now() + SESSION_TTL_MS;
+      req.session.cookie.expires = new Date(req.session.authExpiresAt);
+
       // Save the session before responding to the client.
       req.session.save((saveError) => {
         if (saveError) {
@@ -25,6 +30,7 @@ export async function loginController(req, res, next) {
         res.status(200).json({
           message: "Login successful.",
           user,
+          expiresAt: req.session.authExpiresAt,
         });
       });
     });

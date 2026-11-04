@@ -3,8 +3,9 @@ import { db } from "../database/connection.js";
 export function authenticate(req, res, next) {
   try {
     const sessionUser = req.session?.user;
+    const absoluteExpiry = Number(req.session?.authExpiresAt);
 
-    if (!sessionUser?.id) {
+    if (!sessionUser?.id || !Number.isFinite(absoluteExpiry) || absoluteExpiry <= Date.now()) {
       return res.status(401).json({
         error: "Authentication required.",
       });

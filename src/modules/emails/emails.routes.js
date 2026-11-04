@@ -16,6 +16,7 @@ import {
   replyAllToEmail,
   forwardEmail,
   moveEmailToTrash,
+  bulkMoveEmailToTrash,
   getTrash,
   restoreEmail,
   getEmailById,
@@ -35,6 +36,7 @@ router.post("/send", authenticate, uploadAttachments, sendEmail);
 router.get("/inbox", authenticate, getInbox);
 router.get("/sent", authenticate, getSent);
 router.get("/trash", authenticate, getTrash);
+router.post("/bulk-trash", authenticate, bulkMoveEmailToTrash);
 
 // Static paths must be registered before /:id to avoid being captured as IDs.
 router.post("/drafts", authenticate, createDraft);

@@ -11,7 +11,7 @@ import {
 export function getMyProfileController(req, res, next) {
   try {
     const employee = getEmployeeById(req.user.id);
-    return res.status(200).json({ employee });
+    return res.status(200).json({ employee, expiresAt: req.session.authExpiresAt });
   } catch (error) {
     if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
     return next(error);

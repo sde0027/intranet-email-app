@@ -1,14 +1,15 @@
-import { forwardRef, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
+import { AlertTriangle, ShieldAlert } from "lucide-react";
 
 export const buttonStyles = {
   primary:
-    "inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-company px-5 py-2.5 text-sm font-semibold tracking-[.01em] text-white shadow-[0_2px_5px_rgba(23,70,112,.18)] transition-all duration-200 ease-out hover:-translate-y-px hover:bg-company-dark hover:shadow-[0_5px_14px_rgba(23,70,112,.22)] active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/25 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none",
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-company px-5 py-2.5 text-sm font-semibold tracking-[.01em] text-white shadow-[0_2px_5px_rgba(23,70,112,.18)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-company-dark hover:shadow-[0_6px_16px_rgba(23,70,112,.24)] active:translate-y-0 active:scale-[.985] active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/25 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none",
   secondary:
-    "inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 ease-out hover:-translate-y-px hover:border-company/25 hover:bg-company-soft/60 hover:text-company hover:shadow-md active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/20 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-company/25 hover:bg-company-soft/60 hover:text-company hover:shadow-md active:translate-y-0 active:scale-[.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/20 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   ghost:
-    "inline-flex size-10 items-center justify-center rounded-full text-slate-500 transition-all duration-200 hover:bg-company-soft hover:text-company focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/20 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
+    "inline-flex size-10 items-center justify-center rounded-full text-slate-500 transition-all duration-200 hover:-translate-y-px hover:bg-company-soft hover:text-company active:translate-y-0 active:scale-[.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/20 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
   danger:
-    "inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-red-100 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition-all duration-200 hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-red-100 bg-white px-4 py-2 text-sm font-semibold text-red-700 shadow-sm transition-all duration-200 hover:-translate-y-px hover:border-red-200 hover:bg-red-50 hover:shadow-md active:translate-y-0 active:scale-[.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
 };
 
 export function Button({ variant = "primary", className = "", ...props }) {
@@ -65,6 +66,79 @@ export const TextArea = forwardRef(function TextArea(
     />
   );
 });
+
+export function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  tone = "danger",
+  loading = false,
+  onConfirm,
+  onCancel,
+}) {
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !loading) onCancel?.();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, loading, onCancel]);
+
+  if (!open) return null;
+  const Icon = tone === "warning" ? ShieldAlert : AlertTriangle;
+  const confirmStyle = tone === "warning"
+    ? "bg-amber-600 hover:bg-amber-700 focus-visible:ring-amber-300"
+    : "bg-red-600 hover:bg-red-700 focus-visible:ring-red-300";
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/45 px-4 py-6 backdrop-blur-[3px]"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !loading) onCancel?.();
+      }}
+    >
+      <section
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-description"
+        className="w-full max-w-md animate-[dialog-in_.16s_ease-out] rounded-2xl border border-white/70 bg-white p-6 shadow-[0_24px_80px_rgba(15,35,60,.28)]"
+      >
+        <div className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+          <Icon size={21} />
+        </div>
+        <h2 id="confirm-dialog-title" className="text-lg font-semibold tracking-tight text-slate-900">
+          {title}
+        </h2>
+        <p id="confirm-dialog-description" className="mt-2 text-sm leading-6 text-slate-600">
+          {description}
+        </p>
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            autoFocus
+            disabled={loading}
+            onClick={onCancel}
+            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/25 disabled:opacity-50"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${confirmStyle}`}
+          >
+            {loading ? "Please wait…" : confirmLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
 
 export function Field({ label, htmlFor, children, hint, error }) {
   return (

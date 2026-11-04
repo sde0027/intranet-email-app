@@ -13,6 +13,7 @@ import {
   replyAllToEmailService,
   forwardEmailService,
   moveEmailToTrashService,
+  bulkMoveEmailToTrashService,
   getTrashService,
   restoreEmailService,
   permanentlyDeleteEmailService,
@@ -628,6 +629,35 @@ export function moveEmailToTrash(req, res) {
     });
   } catch (error) {
     return handleEmailActionError(error, res, "Move email to Trash");
+  }
+}
+
+export function bulkMoveEmailToTrash(req, res) {
+  try {
+    const { ids } = req.body ?? {};
+    if (
+      !Array.isArray(ids) ||
+      ids.length < 1 ||
+      ids.length > 100 ||
+      ids.some((id) => !Number.isSafeInteger(id) || id <= 0) ||
+      new Set(ids).size !== ids.length
+    ) {
+      return res.status(400).json({
+        error: "Provide between 1 and 100 unique, valid message IDs.",
+      });
+    }
+
+    const result = bulkMoveEmailToTrashService({
+      emailIds: ids,
+      recipientId: req.user.id,
+    });
+
+    return res.status(200).json({
+      message: `${result.moved} message(s) moved to Trash.`,
+      ...result,
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Move selected emails to Trash");
   }
 }
 

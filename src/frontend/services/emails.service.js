@@ -10,6 +10,7 @@ export const updateDraft = (id, data) => apiRequest(`/emails/drafts/${id}`, { me
 export const deleteDraft = (id) => apiRequest(`/emails/drafts/${id}`, { method: "DELETE" });
 export const markRead = (id, read = true) => apiRequest(`/emails/${id}/${read ? "read" : "unread"}`, { method: "PATCH" });
 export const moveToTrash = (id) => apiRequest(`/emails/${id}`, { method: "DELETE" });
+export const bulkMoveToTrash = (ids) => apiRequest("/emails/bulk-trash", { method: "POST", body: jsonBody({ ids }) });
 export const restoreEmail = (id) => apiRequest(`/emails/${id}/restore`, { method: "PATCH" });
 export const permanentlyDelete = (id) => apiRequest(`/emails/${id}/permanent`, { method: "DELETE" });
 export const sendEmail = (data, files = []) => {

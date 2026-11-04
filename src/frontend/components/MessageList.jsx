@@ -18,6 +18,8 @@ import {
   LoadingState,
   PageHeading,
   TextInput,
+  ConfirmDialog,
+  Button,
 } from "./ui.jsx";
 
 const dateLabel = (value) => {
@@ -40,6 +42,10 @@ export default function MessageList({ folder, title, subtitle }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [refresh, setRefresh] = useState(0);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -47,6 +53,7 @@ export default function MessageList({ folder, title, subtitle }) {
     let active = true;
     setLoading(true);
     setError("");
+    setSelectedIds([]);
     const loaders = {
       inbox: emails.getInbox,
       sent: emails.getSent,
@@ -75,8 +82,12 @@ export default function MessageList({ folder, title, subtitle }) {
       .includes(search.toLowerCase()),
   );
   const pagination = data.pagination;
-  async function action(event, id, fn) {
+  async function action(event, id, fn, confirmation) {
     event.stopPropagation();
+    if (confirmation) {
+      setPendingAction({ id, fn, ...confirmation });
+      return;
+    }
     try {
       await fn(id);
       setRefresh((v) => v + 1);
@@ -84,6 +95,56 @@ export default function MessageList({ folder, title, subtitle }) {
       setError(e.message);
     }
   }
+  async function confirmPendingAction() {
+    if (!pendingAction) return;
+    setActionBusy(true);
+    try {
+      await pendingAction.fn(pendingAction.id);
+      setPendingAction(null);
+      setRefresh((v) => v + 1);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+  const selectableRows = folder === "inbox" ? filtered : [];
+  const allVisibleSelected =
+    selectableRows.length > 0 &&
+    selectableRows.every((message) => selectedIds.includes(message.id));
+
+  function toggleSelected(id) {
+    setSelectedIds((current) =>
+      current.includes(id)
+        ? current.filter((selectedId) => selectedId !== id)
+        : [...current, id],
+    );
+  }
+
+  function toggleAllVisible() {
+    const visibleIds = selectableRows.map((message) => message.id);
+    setSelectedIds((current) =>
+      allVisibleSelected
+        ? current.filter((id) => !visibleIds.includes(id))
+        : [...new Set([...current, ...visibleIds])],
+    );
+  }
+
+  async function moveSelectedToTrash() {
+    if (selectedIds.length === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    setError("");
+    try {
+      await emails.bulkMoveToTrash(selectedIds);
+      setSelectedIds([]);
+      setRefresh((value) => value + 1);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   const openMessage = (message) =>
     navigate(
       folder === "drafts"
@@ -92,7 +153,7 @@ export default function MessageList({ folder, title, subtitle }) {
     );
 
   return (
-    <section>
+    <section className="animate-[content-enter_.22s_ease-out]">
       <PageHeading
         eyebrow="YOUR WORKSPACE"
         title={title}
@@ -119,7 +180,10 @@ export default function MessageList({ folder, title, subtitle }) {
             data-lpignore="true"
             data-1p-ignore="true"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSelectedIds([]);
+            }}
             placeholder={`Search ${title.toLowerCase()}`}
           />
         </div>
@@ -132,6 +196,37 @@ export default function MessageList({ folder, title, subtitle }) {
       {error && (
         <div className="mb-4">
           <Alert>{error}</Alert>
+        </div>
+      )}
+
+      {folder === "inbox" && !loading && filtered.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-company/10 bg-white px-4 py-3 shadow-[0_2px_10px_rgba(25,55,85,.035)]">
+          <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-slate-600">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={toggleAllVisible}
+              className="size-4 rounded border-slate-300 accent-company focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/25 focus-visible:ring-offset-2"
+              aria-label="Select all visible inbox messages"
+            />
+            Select all
+          </label>
+          <div className="flex items-center gap-3">
+            <span className="text-xs tabular-nums text-muted">
+              {selectedIds.length} selected
+            </span>
+            <Button
+              variant="danger"
+              disabled={selectedIds.length === 0 || bulkBusy}
+              onClick={moveSelectedToTrash}
+              className="min-h-9 rounded-xl px-3.5 py-2 text-xs"
+            >
+              <Archive size={15} />
+              {bulkBusy
+                ? "Moving…"
+                : `Move to Trash${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -185,13 +280,29 @@ export default function MessageList({ folder, title, subtitle }) {
                     openMessage(message);
                   }
                 }}
-                className={`group relative grid min-h-17 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-slate-300/64 px-4 py-3.5 transition-[transform,box-shadow,background-color] duration-200 ease-out last:border-b-0 hover:z-1 hover:-translate-y-px hover:shadow-[0_5px_14px_rgba(20,50,100,.18)] hover:bg-[#f5f8fc] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-company sm:grid-cols-[minmax(130px,210px)_minmax(0,1fr)_76px_auto] sm:gap-4 sm:px-5 ${unread ? "bg-[#f7faff]" : "bg-white"}`}
+                className={`group relative grid min-h-17 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-slate-300/64 px-4 py-3.5 transition-[transform,box-shadow,background-color] duration-200 ease-out last:border-b-0 hover:z-1 hover:-translate-y-px hover:shadow-[0_5px_14px_rgba(20,50,100,.18)] hover:bg-[#f5f8fc] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-company sm:grid-cols-[minmax(130px,210px)_minmax(0,1fr)_76px_auto] sm:gap-4 sm:px-5 ${unread ? "bg-[#f7faff]" : "bg-white"} ${folder === "inbox" ? "pl-12" : ""} ${selectedIds.includes(message.id) ? "bg-company-soft/65" : ""}`}
               >
+                {folder === "inbox" && (
+                  <label
+                    className="absolute left-3 top-1/2 z-10 grid size-7 -translate-y-1/2 cursor-pointer place-items-center rounded-lg transition hover:bg-company-soft"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    title="Select message"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(message.id)}
+                      onChange={() => toggleSelected(message.id)}
+                      className="size-4 rounded border-slate-300 accent-company focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/25 focus-visible:ring-offset-2"
+                      aria-label={`Select ${message.subject || "message"}`}
+                    />
+                  </label>
+                )}
                 {unread && (
                   <span className="absolute inset-y-2 left-0 w-0.75 rounded-r bg-company" />
                 )}
                 <div
-                  className={`min-w-0 truncate text-[15px] sm:pr-1 ${unread ? "font-semibold text-slate-800" : "font-medium text-slate-600"}`}
+                  className={`min-w-0 pl-8 truncate text-[15px] sm:pr-1 ${unread ? "font-semibold text-slate-800" : "font-medium text-slate-600"}`}
                 >
                   {sender}
                 </div>
@@ -201,8 +312,8 @@ export default function MessageList({ folder, title, subtitle }) {
                   >
                     {message.subject || "(No subject)"}
                   </strong>
-                  <span className="hidden min-w-0 flex-1 truncate text-[15px] text-slate-400 md:block">
-                    — {(message.body || "").replace(/\s+/g, " ").slice(0, 140)}
+                  <span className="hidden min-w-0  flex-1 truncate text-[15px] text-slate-400 md:block">
+                    - {(message.body || "").replace(/\s+/g, " ").slice(0, 140)}
                   </span>
                 </div>
                 <time className="col-start-2 row-start-1 whitespace-nowrap text-right text-xs font-medium tabular-nums text-slate-500 sm:col-start-auto sm:row-auto">
@@ -227,7 +338,12 @@ export default function MessageList({ folder, title, subtitle }) {
                         title="Delete permanently"
                         aria-label="Delete permanently"
                         onClick={(e) =>
-                          action(e, message.id, emails.permanentlyDelete)
+                          action(e, message.id, emails.permanentlyDelete, {
+                            title: "Permanently delete this message?",
+                            description:
+                              "This message and its stored attachments will be permanently removed. This action cannot be undone.",
+                            confirmLabel: "Delete permanently",
+                          })
                         }
                         className="text-slate-500 hover:bg-red-50 hover:text-red-700"
                       >
@@ -238,7 +354,14 @@ export default function MessageList({ folder, title, subtitle }) {
                     <IconButton
                       title="Delete draft"
                       aria-label="Delete draft"
-                      onClick={(e) => action(e, message.id, emails.deleteDraft)}
+                      onClick={(e) =>
+                        action(e, message.id, emails.deleteDraft, {
+                          title: "Permanently delete this draft?",
+                          description:
+                            "This draft will be permanently removed and cannot be recovered.",
+                          confirmLabel: "Delete draft",
+                        })
+                      }
                       className="text-slate-500 hover:bg-red-50 hover:text-red-700"
                     >
                       <Trash2 size={16} />
@@ -282,6 +405,15 @@ export default function MessageList({ folder, title, subtitle }) {
           </IconButton>
         </div>
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        title={pendingAction?.title}
+        description={pendingAction?.description}
+        confirmLabel={pendingAction?.confirmLabel}
+        loading={actionBusy}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={confirmPendingAction}
+      />
     </section>
   );
 }

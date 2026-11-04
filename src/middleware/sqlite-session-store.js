@@ -1,9 +1,15 @@
 import session from "express-session";
 import { db } from "../database/connection.js";
 
-const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+export const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // Absolute 8-hour lifetime
 
 function getExpiration(sessionData) {
+  // Authenticated sessions carry a fixed deadline set once at login.
+  const absoluteExpiry = Number(sessionData.authExpiresAt);
+  if (Number.isFinite(absoluteExpiry) && absoluteExpiry > 0) {
+    return absoluteExpiry;
+  }
+
   const expires = sessionData.cookie?.expires;
 
   if (expires) {
@@ -20,7 +26,7 @@ function getExpiration(sessionData) {
     return Date.now() + Math.max(0, maxAge);
   }
 
-  return Date.now() + DEFAULT_TTL_MS;
+  return Date.now() + SESSION_TTL_MS;
 }
 
 export class SQLiteSessionStore extends session.Store {
@@ -73,7 +79,17 @@ export class SQLiteSessionStore extends session.Store {
         return callback(null, null);
       }
 
-      callback(null, JSON.parse(row.sess));
+      const sessionData = JSON.parse(row.sess);
+
+      // Sessions created before absolute expiry was introduced are invalidated
+      // once, so they cannot keep using the old rolling-expiry behaviour.
+      const absoluteExpiry = Number(sessionData.authExpiresAt);
+      if (!Number.isFinite(absoluteExpiry) || absoluteExpiry <= Date.now()) {
+        this.statements.destroy.run(sid);
+        return callback(null, null);
+      }
+
+      callback(null, sessionData);
     } catch (error) {
       callback(error);
     }

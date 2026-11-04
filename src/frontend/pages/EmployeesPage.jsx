@@ -11,6 +11,7 @@ import {
   LoadingState,
   PageHeading,
   TextInput,
+  ConfirmDialog,
 } from "../components/ui.jsx";
 
 const emptyCreateForm = {
@@ -44,7 +45,9 @@ export default function EmployeesPage() {
       phone: "",
       profile_photo: null,
     }),
-    [photoPreview, setPhotoPreview] = useState("");
+    [photoPreview, setPhotoPreview] = useState(""),
+    [pendingDeactivation, setPendingDeactivation] = useState(null),
+    [statusBusy, setStatusBusy] = useState(false);
   async function load() {
     setLoading(true);
     try {
@@ -139,7 +142,6 @@ export default function EmployeesPage() {
             : null,
         };
         setUser(refreshedUser);
-        sessionStorage.setItem("intranet.user", JSON.stringify(refreshedUser));
       }
       closeEditor();
       setSuccess(`${editForm.name}'s profile was updated.`);
@@ -152,17 +154,28 @@ export default function EmployeesPage() {
   }
   async function toggle(employee) {
     const next = employee.is_active !== 1;
-    if (
-      !window.confirm(
-        `${next ? "Activate" : "Deactivate"} ${employee.name}'s account?`,
-      )
-    )
+    if (!next) {
+      setPendingDeactivation(employee);
       return;
+    }
     try {
-      await users.updateEmployeeStatus(employee.id, next);
+      await users.updateEmployeeStatus(employee.id, true);
       await load();
     } catch (e) {
       setError(e.message);
+    }
+  }
+  async function confirmDeactivation() {
+    if (!pendingDeactivation) return;
+    setStatusBusy(true);
+    try {
+      await users.updateEmployeeStatus(pendingDeactivation.id, false);
+      setPendingDeactivation(null);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setStatusBusy(false);
     }
   }
   const visible = employees.filter((employee) =>
@@ -504,6 +517,16 @@ export default function EmployeesPage() {
           </section>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(pendingDeactivation)}
+        tone="warning"
+        title={`Deactivate ${pendingDeactivation?.name || "this employee"}?`}
+        description="They will immediately lose access to the intranet. Their account and existing records will remain intact, and an administrator can reactivate the account later."
+        confirmLabel="Deactivate account"
+        loading={statusBusy}
+        onCancel={() => setPendingDeactivation(null)}
+        onConfirm={confirmDeactivation}
+      />
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   ExternalLink,
@@ -44,6 +44,7 @@ const links = [
 export default function AppLayout() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   async function handleLogout() {
@@ -188,7 +189,7 @@ export default function AppLayout() {
           </div>
         </aside>
         <main className="min-w-0 flex-1 scroll-smooth overflow-y-auto overscroll-y-contain px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 xl:px-12">
-          <div className="mx-auto w-full max-w-375">
+          <div key={location.pathname} className="mx-auto w-full max-w-375 animate-[content-enter_.22s_ease-out]">
             <Outlet />
           </div>
         </main>

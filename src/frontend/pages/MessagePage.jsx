@@ -18,7 +18,19 @@ export default function MessagePage() {
     navigate = useNavigate(),
     { user } = useAuth();
   const [email, setEmail] = useState(null),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [movingToTrash, setMovingToTrash] = useState(false);
+  async function moveMessageToTrash() {
+    setMovingToTrash(true);
+    setError("");
+    try {
+      await emails.moveToTrash(id);
+      navigate("/inbox");
+    } catch (e) {
+      setError(e.message);
+      setMovingToTrash(false);
+    }
+  }
   useEffect(() => {
     let alive = true;
     emails
@@ -67,12 +79,11 @@ export default function MessagePage() {
             Message
           </span>
           <Button
-            variant="secondary"
-            onClick={() =>
-              emails.moveToTrash(id).then(() => navigate("/inbox"))
-            }
+            variant="danger"
+            disabled={movingToTrash}
+            onClick={moveMessageToTrash}
           >
-            <Archive size={16} /> Move to trash
+            <Archive size={16} /> {movingToTrash ? "Moving…" : "Move to trash"}
           </Button>
         </div>
         <div className="px-5 py-6 sm:px-8 sm:py-8">
@@ -102,7 +113,7 @@ export default function MessagePage() {
               {email.sent_at ? new Date(email.sent_at).toLocaleString() : ""}
             </time>
           </div>
-          <article className="min-h-48 whitespace-pre-wrap wrap-break-word py-7 text-[15px] leading-7 text-slate-700">
+          <article className="min-h-48 whitespace-pre-wrap wrap-break-word py-7 text-[15px] leading-[1.52] text-slate-700">
             {email.body}
           </article>
           {email.attachments?.length > 0 && (
