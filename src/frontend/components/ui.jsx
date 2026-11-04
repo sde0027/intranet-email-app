@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 
 export const buttonStyles = {
   primary:
@@ -25,13 +25,42 @@ export function IconButton({ className = "", ...props }) {
 }
 
 export const TextInput = forwardRef(function TextInput(
-  { className = "", ...props },
+  { className = "", autoComplete = "off", name, ...props },
   ref,
 ) {
+  // Chromium may ignore autocomplete="off" for form-history suggestions.
+  // A fresh field name per mount prevents old values being matched to this field.
+  const [historySafeName] = useState(
+    () => `intranet-field-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+  const isLoginField =
+    autoComplete === "username" || autoComplete === "current-password";
+
   return (
     <input
       ref={ref}
+      name={isLoginField ? name : historySafeName}
+      autoComplete={autoComplete}
       className={`h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-ink shadow-[0_1px_3px_rgba(20,45,70,.07)] outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-slate-400 hover:border-slate-300 focus:border-company/65 focus:shadow-[0_0_0_3px_rgba(23,70,112,.09),0_1px_3px_rgba(20,45,70,.06)] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 aria-invalid:border-red-400 aria-invalid:focus:shadow-[0_0_0_3px_rgba(220,38,38,.09)] ${className}`}
+      {...props}
+    />
+  );
+});
+
+export const TextArea = forwardRef(function TextArea(
+  { className = "", autoComplete = "off", name, ...props },
+  ref,
+) {
+  const [historySafeName] = useState(
+    () => `intranet-textarea-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+
+  return (
+    <textarea
+      ref={ref}
+      name={historySafeName}
+      autoComplete={autoComplete}
+      className={className}
       {...props}
     />
   );

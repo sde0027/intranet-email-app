@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import * as emails from "../services/emails.service.js";
-import { Alert, Button, PageHeading, TextInput } from "../components/ui.jsx";
+import { Alert, Button, PageHeading, TextArea, TextInput } from "../components/ui.jsx";
 
 export default function ComposePage() {
   const [params] = useSearchParams();
@@ -260,9 +260,8 @@ export default function ComposePage() {
           >
             Message
           </label>
-          <textarea
+          <TextArea
             id="body"
-            name="intranet-compose-message"
             {...inputProps}
             rows={11}
             value={form.body}

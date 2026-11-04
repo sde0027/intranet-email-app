@@ -416,6 +416,7 @@ export default function EmployeesPage() {
                   <Camera size={15} /> Choose photo
                   <input
                     type="file"
+                    autoComplete="new-password"
                     accept="image/jpeg,image/png,image/webp"
                     className="sr-only"
                     onChange={(e) => choosePhoto(e.target.files?.[0])}

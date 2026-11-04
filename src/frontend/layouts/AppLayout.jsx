@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  Bell,
-  ChevronDown,
+  CalendarDays,
+  ExternalLink,
   FileText,
   Inbox,
   LogOut,
   Menu,
+  Package,
   Plus,
   Send,
   Shield,
@@ -17,6 +18,21 @@ import { useState } from "react";
 import Brand from "../components/Brand.jsx";
 import { Avatar, Button, IconButton } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+
+const companyPortals = [
+  {
+    label: "Attendance Management",
+    shortLabel: "Attendance",
+    icon: CalendarDays,
+    url: import.meta.env.VITE_ATTENDANCE_PORTAL_URL,
+  },
+  {
+    label: "Product Inventory",
+    shortLabel: "Inventory",
+    icon: Package,
+    url: import.meta.env.VITE_INVENTORY_PORTAL_URL,
+  },
+];
 
 const links = [
   { to: "/inbox", label: "Inbox", icon: Inbox },
@@ -53,29 +69,35 @@ export default function AppLayout() {
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </IconButton>
         <Brand />
-        {/* Replace the dummies with the Attendance and Inventory buttons */}
-        {/* <div className="ml-auto hidden w-full max-w-xl items-center rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 lg:flex">
-          <span className="text-slate-400">⌕</span>
-          <input
-            placeholder="Search your workspace"
-            aria-label="Search your workspace"
-            disabled
-            className="ml-2 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
-          />
-          <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-400">
-            ⌘ K
-          </kbd>
-        </div>
-        <IconButton className="ml-auto lg:ml-0" aria-label="Notifications">
-          <Bell size={18} />
-        </IconButton>
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-          <Avatar name={user?.name} photo={user?.profile_photo_url} size="sm" />
-          <span className="hidden max-w-36 truncate sm:inline">
-            {user?.name}
-          </span>
-          <ChevronDown size={15} className="hidden text-slate-400 sm:block" />
-        </div> */}
+        <nav
+          aria-label="Company portals"
+          className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3"
+        >
+          {companyPortals.map(({ label, shortLabel, icon: Icon, url }) => (
+            <a
+              key={label}
+              href={url || "#"}
+              target={url ? "_blank" : undefined}
+              rel={url ? "noopener noreferrer" : undefined}
+              aria-disabled={!url}
+              title={
+                url ? `Open ${label}` : `${label} portal URL is not configured`
+              }
+              onClick={(event) => {
+                if (!url) event.preventDefault();
+              }}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 shadow-[0_1px_3px_rgba(20,50,80,.06)] transition duration-200 hover:-translate-y-px hover:border-company/30 hover:bg-company-soft hover:text-company hover:shadow-[0_4px_12px_rgba(20,50,80,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/30 focus-visible:ring-offset-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:hover:translate-y-0 aria-disabled:hover:border-slate-200 aria-disabled:hover:bg-white aria-disabled:hover:text-slate-600 aria-disabled:hover:shadow-[0_1px_3px_rgba(20,50,80,.06)] sm:px-3.5 sm:text-sm"
+            >
+              <Icon size={16} className="shrink-0" />
+              <span className="hidden sm:inline">{shortLabel}</span>
+              <span className="sr-only sm:hidden">{label}</span>
+              <ExternalLink
+                size={12}
+                className="hidden text-slate-400 sm:block"
+              />
+            </a>
+          ))}
+        </nav>
       </header>
 
       <div className="relative flex min-h-0 flex-1">
