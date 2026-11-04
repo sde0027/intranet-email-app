@@ -13,15 +13,15 @@ export class EmailServiceError extends Error {
   }
 }
 
-function validateRecipients(to, cc, bcc) {
+function validateRecipients(to, cc, bcc, { requireTo = true } = {}) {
   const groups = [
-    { type: "TO", ids: to },
-    { type: "CC", ids: cc },
-    { type: "BCC", ids: bcc },
+    { type: "TO", values: to },
+    { type: "CC", values: cc },
+    { type: "BCC", values: bcc },
   ];
 
   for (const group of groups) {
-    if (!Array.isArray(group.ids)) {
+    if (!Array.isArray(group.values)) {
       throw new EmailServiceError(
         `${group.type} recipients must be an array.`,
         400,
@@ -29,18 +29,24 @@ function validateRecipients(to, cc, bcc) {
       );
     }
 
-    for (const id of group.ids) {
-      if (!Number.isSafeInteger(id) || id <= 0) {
+    for (const value of group.values) {
+      const validId = Number.isSafeInteger(value) && value > 0;
+      const validEmail =
+        typeof value === "string" &&
+        value.trim() === value &&
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+      if (!validId && !validEmail) {
         throw new EmailServiceError(
-          "Recipient IDs must be positive integers.",
+          "Recipients must be positive employee IDs or valid email addresses.",
           400,
-          "INVALID_RECIPIENT_ID",
+          "INVALID_RECIPIENT",
         );
       }
     }
   }
 
-  if (to.length === 0) {
+  if (requireTo && to.length === 0) {
     throw new EmailServiceError(
       "At least one TO recipient is required.",
       400,
@@ -48,8 +54,41 @@ function validateRecipients(to, cc, bcc) {
     );
   }
 
-  const allIds = groups.flatMap((group) => group.ids);
+  return groups;
+}
 
+// Resolve both legacy numeric IDs and email addresses to active employee IDs.
+// Email matching is case-insensitive because users.email uses COLLATE NOCASE.
+function resolveRecipientGroups(to, cc = [], bcc = [], options = {}) {
+  const groups = validateRecipients(to, cc, bcc, options);
+  const findById = db.prepare(`
+    SELECT id FROM users WHERE id = ? AND is_active = 1
+  `);
+  const findByEmail = db.prepare(`
+    SELECT id FROM users WHERE email = ? COLLATE NOCASE AND is_active = 1
+  `);
+
+  const resolvedGroups = groups.map((group) => ({
+    type: group.type,
+    ids: group.values.map((value) => {
+      const employee =
+        typeof value === "number"
+          ? findById.get(value)
+          : findByEmail.get(value);
+
+      if (!employee) {
+        throw new EmailServiceError(
+          "One or more recipients do not exist or are inactive.",
+          400,
+          "INVALID_RECIPIENT",
+        );
+      }
+
+      return employee.id;
+    }),
+  }));
+
+  const allIds = resolvedGroups.flatMap((group) => group.ids);
   if (new Set(allIds).size !== allIds.length) {
     throw new EmailServiceError(
       "Duplicate recipients are not allowed.",
@@ -58,7 +97,54 @@ function validateRecipients(to, cc, bcc) {
     );
   }
 
-  return groups;
+  return resolvedGroups;
+}
+
+function insertRecipientGroups(emailId, groups) {
+  const insertRecipient = db.prepare(`
+    INSERT INTO email_recipients (email_id, recipient_id, recipient_type)
+    VALUES (?, ?, ?)
+  `);
+
+  for (const group of groups) {
+    for (const recipientId of group.ids) {
+      insertRecipient.run(emailId, recipientId, group.type);
+    }
+  }
+}
+
+function getDraftRecipients(emailId) {
+  const rows = db.prepare(`
+    SELECT
+      er.recipient_type,
+      u.id,
+      u.name,
+      u.email
+    FROM email_recipients er
+    INNER JOIN users u ON u.id = er.recipient_id
+    WHERE er.email_id = ?
+    ORDER BY
+      CASE er.recipient_type
+        WHEN 'TO' THEN 1
+        WHEN 'CC' THEN 2
+        WHEN 'BCC' THEN 3
+      END,
+      u.name
+  `).all(emailId);
+
+  const recipients = { to: [], cc: [], bcc: [] };
+  for (const row of rows) {
+    recipients[row.recipient_type.toLowerCase()].push({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+    });
+  }
+  return recipients;
+}
+
+function getDraftWithRecipients(draft) {
+  return draft ? { ...draft, recipients: getDraftRecipients(draft.id) } : draft;
 }
 
 function validateMessage(subject, body) {
@@ -84,33 +170,8 @@ export function sendEmailService({
   // 1. Validate message data.
   validateMessage(subject, body);
 
-  // 2. Validate recipient data.
-  const groups = validateRecipients(to, cc, bcc);
-
-  // 3. Collect unique recipient IDs.
-  const recipientIds = groups.flatMap((group) => group.ids);
-
-  // 4. Verify that every recipient exists and is active.
-  const placeholders = recipientIds.map(() => "?").join(", ");
-
-  const activeRecipients = db
-    .prepare(
-      `
-      SELECT id
-      FROM users
-      WHERE id IN (${placeholders})
-      AND is_active = 1
-    `,
-    )
-    .all(...recipientIds);
-
-  if (activeRecipients.length !== recipientIds.length) {
-    throw new EmailServiceError(
-      "One or more recipients do not exist or are inactive.",
-      400,
-      "INVALID_RECIPIENT",
-    );
-  }
+  // 2. Resolve employee IDs and email addresses to active employee IDs.
+  const groups = resolveRecipientGroups(to, cc, bcc, { requireTo: true });
 
   // 5. Prepare database statements.
   const insertEmail = db.prepare(`
@@ -122,15 +183,6 @@ export function sendEmailService({
       parent_email_id
     )
     VALUES (?, ?, ?, 'DRAFT',?)
-  `);
-
-  const insertRecipient = db.prepare(`
-    INSERT INTO email_recipients (
-      email_id,
-      recipient_id,
-      recipient_type
-    )
-    VALUES (?, ?, ?)
   `);
 
   const markAsSent = db.prepare(`
@@ -153,11 +205,7 @@ export function sendEmailService({
 
     const emailId = Number(emailResult.lastInsertRowid);
 
-    for (const group of groups) {
-      for (const recipientId of group.ids) {
-        insertRecipient.run(emailId, recipientId, group.type);
-      }
-    }
+    insertRecipientGroups(emailId, groups);
     insertAttachmentMetadata(emailId, attachments);
 
     markAsSent.run(emailId);
@@ -411,18 +459,18 @@ export function getEmailByIdService({ emailId, userId }) {
   const isSender = email.sender_id === userId;
 
   // 3. Retrieve the current user's recipient-specific information.
-  const userRecipient = isSender
-    ? null
-    : db
-        .prepare(
-          `
-        SELECT recipient_type, is_read
-        FROM email_recipients
-        WHERE email_id = ?
-          AND recipient_id = ?
-      `,
-        )
-        .get(emailId, userId);
+  // A user may be both the sender and a recipient (self-sent email).
+  // In that case, their recipient row still owns the read/unread state.
+  const userRecipient = db
+    .prepare(
+      `
+      SELECT recipient_type, is_read
+      FROM email_recipients
+      WHERE email_id = ?
+        AND recipient_id = ?
+    `,
+    )
+    .get(emailId, userId);
 
   // 4. Retrieve recipients.
   // The sender can see everyone, including BCC recipients.
@@ -507,8 +555,15 @@ export function getEmailByIdService({ emailId, userId }) {
   };
 }
 
-// Create a new draft.
-export function createDraftService({ senderId, subject = "", body = "" }) {
+// Create a new draft. Recipient groups are optional while composing.
+export function createDraftService({
+  senderId,
+  subject = "",
+  body = "",
+  to = [],
+  cc = [],
+  bcc = [],
+}) {
   if (typeof subject !== "string" || typeof body !== "string") {
     throw new EmailServiceError(
       "Subject and body must be strings.",
@@ -517,19 +572,20 @@ export function createDraftService({ senderId, subject = "", body = "" }) {
     );
   }
 
-  const insertDraft = db.prepare(`
-    INSERT INTO emails (
-      sender_id,
-      subject,
-      body,
-      status
-    )
-    VALUES (?, ?, ?, 'DRAFT')
-  `);
+  const groups = resolveRecipientGroups(to, cc, bcc, { requireTo: false });
 
-  const result = insertDraft.run(senderId, subject, body);
+  const createDraftTransaction = db.transaction(() => {
+    const insertDraft = db.prepare(`
+      INSERT INTO emails (sender_id, subject, body, status)
+      VALUES (?, ?, ?, 'DRAFT')
+    `);
+    const result = insertDraft.run(senderId, subject, body);
+    const draftId = Number(result.lastInsertRowid);
+    insertRecipientGroups(draftId, groups);
+    return getDraftWithRecipients(findDraft.get(draftId, senderId));
+  });
 
-  return findDraft.get(Number(result.lastInsertRowid), senderId);
+  return createDraftTransaction();
 }
 
 // Retrieve all drafts belonging to an employee.
@@ -558,7 +614,7 @@ export function getDraftsService({ senderId, page, limit }) {
 
   const total = countDrafts.get(senderId).total;
 
-  const drafts = getDrafts.all(senderId, limit, offset);
+  const drafts = getDrafts.all(senderId, limit, offset).map(getDraftWithRecipients);
 
   return {
     drafts,
@@ -582,15 +638,26 @@ export function getDraftService({ senderId, draftId }) {
     throw new EmailServiceError("Draft not found.", 404, "DRAFT_NOT_FOUND");
   }
 
-  return draft;
+  return getDraftWithRecipients(draft);
 }
 
-// Update an existing draft.
-export function updateDraftService({ senderId, draftId, subject, body }) {
+// Update draft content and, when supplied, replace the corresponding recipient groups.
+export function updateDraftService({
+  senderId,
+  draftId,
+  subject,
+  body,
+  to,
+  cc,
+  bcc,
+}) {
   const hasSubject = subject !== undefined;
   const hasBody = body !== undefined;
+  const hasTo = to !== undefined;
+  const hasCc = cc !== undefined;
+  const hasBcc = bcc !== undefined;
 
-  if (!hasSubject && !hasBody) {
+  if (!hasSubject && !hasBody && !hasTo && !hasCc && !hasBcc) {
     throw new EmailServiceError(
       "Provide at least one field to update.",
       400,
@@ -609,34 +676,76 @@ export function updateDraftService({ senderId, draftId, subject, body }) {
     );
   }
 
-  const assignments = [];
-  const values = [];
-
-  if (hasSubject) {
-    assignments.push("subject = ?");
-    values.push(subject);
-  }
-
-  if (hasBody) {
-    assignments.push("body = ?");
-    values.push(body);
-  }
-
-  const updateDraft = db.prepare(`
-    UPDATE emails
-    SET ${assignments.join(", ")}
-    WHERE id = ?
-      AND sender_id = ?
-      AND status = 'DRAFT'
-  `);
-
-  const result = updateDraft.run(...values, draftId, senderId);
-
-  if (result.changes === 0) {
+  const existingDraft = findDraft.get(draftId, senderId);
+  if (!existingDraft) {
     throw new EmailServiceError("Draft not found.", 404, "DRAFT_NOT_FOUND");
   }
 
-  return findDraft.get(draftId, senderId);
+  const currentRecipients = getDraftRecipients(draftId);
+  const changedGroups = resolveRecipientGroups(
+    hasTo ? to : [],
+    hasCc ? cc : [],
+    hasBcc ? bcc : [],
+    { requireTo: false },
+  ).filter((group) =>
+    (group.type === "TO" && hasTo) ||
+    (group.type === "CC" && hasCc) ||
+    (group.type === "BCC" && hasBcc),
+  );
+
+  const changedIds = (type) =>
+    changedGroups.find((group) => group.type === type).ids;
+  const finalRecipientIds = [
+    ...(hasTo ? changedIds("TO") : currentRecipients.to.map((r) => r.id)),
+    ...(hasCc ? changedIds("CC") : currentRecipients.cc.map((r) => r.id)),
+    ...(hasBcc ? changedIds("BCC") : currentRecipients.bcc.map((r) => r.id)),
+  ];
+  if (new Set(finalRecipientIds).size !== finalRecipientIds.length) {
+    throw new EmailServiceError(
+      "Duplicate recipients are not allowed.",
+      400,
+      "DUPLICATE_RECIPIENTS",
+    );
+  }
+
+  const updateTransaction = db.transaction(() => {
+    const assignments = [];
+    const values = [];
+    if (hasSubject) {
+      assignments.push("subject = ?");
+      values.push(subject);
+    }
+    if (hasBody) {
+      assignments.push("body = ?");
+      values.push(body);
+    }
+    if (assignments.length > 0) {
+      db.prepare(`
+        UPDATE emails
+        SET ${assignments.join(", ")}
+        WHERE id = ? AND sender_id = ? AND status = 'DRAFT'
+      `).run(...values, draftId, senderId);
+    }
+
+    if (hasTo || hasCc || hasBcc) {
+      const typesToReplace = [
+        ...(hasTo ? ["TO"] : []),
+        ...(hasCc ? ["CC"] : []),
+        ...(hasBcc ? ["BCC"] : []),
+      ];
+      const placeholders = typesToReplace.map(() => "?").join(", ");
+      db.prepare(`
+        DELETE FROM email_recipients
+        WHERE email_id = ? AND recipient_type IN (${placeholders})
+      `).run(draftId, ...typesToReplace);
+
+      insertRecipientGroups(draftId, changedGroups);
+    }
+
+    return getDraftWithRecipients(findDraft.get(draftId, senderId));
+  });
+
+  return updateTransaction();
 }
 
 // Delete a draft.

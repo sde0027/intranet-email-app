@@ -7,6 +7,7 @@ import { createLoginRateLimiter } from "./middleware/login-rate-limit.js";
 import session from "express-session";
 import { SQLiteSessionStore } from "./middleware/sqlite-session-store.js";
 import { cleanupExpiredTrashService } from "./modules/emails/emails.service.js";
+import { cleanupOrphanedProfilePhotos } from "./modules/users/users.service.js";
 
 // Route imports
 import authRoutes from "./modules/auth/auth.routes.js";
@@ -15,7 +16,6 @@ import emailsRoutes from "./modules/emails/emails.routes.js";
 
 // Auth imports
 import { authenticate } from "./middleware/authenticate.js";
-import { authorize } from "./middleware/authorize.js";
 if (!config.sessionSecret) {
   throw new Error("SESSION_SECRET is missing from the environment configuration.");
 }
@@ -48,7 +48,7 @@ app.use(
   createLoginRateLimiter(config.loginRateLimit),
   authRoutes,
 );
-app.use("/api/employees", authenticate, authorize("ADMIN"), usersRoutes);
+app.use("/api/employees", authenticate, usersRoutes);
 app.use("/api/emails", emailsRoutes);
 
 app.get("/api/health", (req, res) => {
@@ -79,6 +79,16 @@ function runMaintenance() {
     sessionStore.clearExpired();
   } catch (error) {
     console.error("Session cleanup failed:", error.message);
+  }
+
+  // Remove profile-photo files left behind by failed updates or process crashes.
+  try {
+    const deletedCount = cleanupOrphanedProfilePhotos();
+    if (deletedCount > 0) {
+      console.log(`Profile photo cleanup completed: ${deletedCount} orphaned files removed.`);
+    }
+  } catch (error) {
+    console.error("Profile photo cleanup failed:", error.message);
   }
 
   // Permanently remove recipient associations for expired Trash items.

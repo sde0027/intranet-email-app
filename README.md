@@ -843,3 +843,68 @@ License information will be added once the project licensing decision has been f
 **Project Status:** Backend Complete — Frontend Development Pending.
 
 Built as a practical exploration of backend engineering, relational database design, authentication, session management, REST API development, file handling and full-stack application architecture.
+
+## React frontend
+
+The frontend has been migrated to React + Vite while retaining the existing Express, SQLite, and session-authentication backend.
+
+### Development
+
+Install the frontend dependencies and reconcile the lockfile:
+
+```bash
+npm install
+```
+
+Run the API and frontend in separate terminals:
+
+```bash
+npm run server
+npm run dev
+```
+
+The Vite development server runs at `http://127.0.0.1:5173` and proxies `/api` requests to the Express server at `http://127.0.0.1:3000`.
+
+### Frontend stack
+
+- React and JSX
+- React Router
+- Tailwind CSS 4 with the Vite plugin
+- Lucide React icons
+- Native Fetch API with `credentials: "include"` for the existing Express session cookie
+
+### Optional company portal links
+
+Set these Vite environment variables when the final portal addresses are available:
+
+```env
+VITE_ATTENDANCE_PORTAL_URL=
+VITE_INVENTORY_PORTAL_URL=
+```
+
+Until configured, the portal links remain visibly present but inactive. No temporary or guessed portal addresses are embedded in the application.
+
+### Current frontend capabilities
+
+- Employee and administrator sign-in modes with client-side validation
+- Existing backend session login and logout
+- Inbox, Sent, Drafts, and Trash views with pagination
+- Message reading, trash, restore, and permanent deletion
+- Compose and send with To, Cc, Bcc employee IDs and up to five attachments
+- Save, edit, and delete drafts
+- Reply, reply-all, and forward workflows
+- Administrator employee list, account creation, and account activation/deactivation
+
+Designations and profile photos are not stored in the backend. The current profile uses initials and the account role as a display label until company-provided profile data is available.
+
+### Recipient input
+
+The current backend accepts recipient user IDs in the `to`, `cc`, and `bcc` arrays. The compose form therefore accepts employee IDs separated by commas. An employee-accessible employee directory or email-to-ID lookup is not currently exposed by the backend, so the frontend does not attempt to call the administrator-only employee endpoint for regular employees.
+
+### Build
+
+```bash
+npm run build
+```
+
+The Express backend and database schema are not modified by the React frontend migration.

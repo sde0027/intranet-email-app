@@ -19,7 +19,7 @@ export async function login({ email, password }) {
   const user = db
     .prepare(
       `
-    SELECT id, name, email, password_hash, role, is_active
+    SELECT id, name, email, password_hash, role, is_active, designation, phone, profile_photo
     FROM users
     WHERE email = ?
   `,
@@ -45,5 +45,8 @@ export async function login({ email, password }) {
     name: user.name,
     email: user.email,
     role: user.role,
+    designation: user.designation,
+    phone: user.phone,
+    profile_photo_url: user.profile_photo ? `/api/employees/${user.id}/photo` : null,
   };
 }

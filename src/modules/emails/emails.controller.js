@@ -296,6 +296,9 @@ export function createDraft(req, res) {
       senderId: req.user.id,
       subject: req.body.subject,
       body: req.body.body,
+      to: req.body.to,
+      cc: req.body.cc,
+      bcc: req.body.bcc,
     });
 
     return res.status(201).json({
@@ -372,6 +375,9 @@ export function updateDraft(req, res) {
       draftId,
       subject: req.body.subject,
       body: req.body.body,
+      to: req.body.to,
+      cc: req.body.cc,
+      bcc: req.body.bcc,
     });
 
     return res.status(200).json({
