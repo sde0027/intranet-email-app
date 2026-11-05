@@ -281,7 +281,7 @@ export default function MessageList({ folder, title, subtitle }) {
                       ? () => setConfirmSentDelete(true)
                       : () => setConfirmTrashDelete(true)
                 }
-                className="min-h-9 rounded-xl px-3.5 py-2 text-xs"
+                className="min-h-7 rounded-xl px-3.5 py-2 text-xs"
               >
                 {folder === "inbox" ? (
                   <Archive size={15} />
@@ -363,7 +363,7 @@ export default function MessageList({ folder, title, subtitle }) {
                     openMessage(message);
                   }
                 }}
-                className={`group relative grid min-h-17 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-slate-300/64 px-4 py-2 transition-[transform,box-shadow,background-color] duration-200 ease-out last:border-b-0 hover:z-1 hover:-translate-y-px hover:shadow-[0_5px_14px_rgba(20,50,100,.18)] hover:bg-[#f5f8fc] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-company sm:grid-cols-[minmax(130px,210px)_minmax(0,1fr)_76px_auto] sm:gap-4 sm:px-5 ${unread ? "bg-[#f7faff]" : "bg-white"} ${folder === "inbox" || folder === "sent" || folder === "trash" ? "pl-12" : ""} ${selectedIds.includes(message.id) ? "bg-company-soft/65" : ""}`}
+                className={`group relative grid min-h-13 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-slate-300/64 px-4 py-2 transition-[transform,box-shadow,background-color] duration-200 ease-out last:border-b-0 hover:z-1 hover:-translate-y-px hover:shadow-[0_5px_14px_rgba(20,50,100,.18)] hover:bg-[#f5f8fc] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-company sm:grid-cols-[minmax(130px,210px)_minmax(0,1fr)_76px_auto] sm:gap-4 sm:px-5 ${unread ? "bg-[#f7faff]" : "bg-white"} ${folder === "inbox" || folder === "sent" || folder === "trash" ? "pl-12" : ""} ${selectedIds.includes(message.id) ? "bg-company-soft/65" : ""}`}
               >
                 {(folder === "inbox" ||
                   folder === "sent" ||

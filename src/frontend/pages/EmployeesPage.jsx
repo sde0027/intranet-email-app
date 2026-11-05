@@ -230,7 +230,10 @@ export default function EmployeesPage() {
                 {...inputProtection}
                 value={form.employee_code}
                 onChange={(e) =>
-                  setForm((v) => ({ ...v, employee_code: e.target.value.toUpperCase() }))
+                  setForm((v) => ({
+                    ...v,
+                    employee_code: e.target.value.toUpperCase(),
+                  }))
                 }
                 placeholder="e.g. SDE-001"
               />
@@ -469,7 +472,10 @@ export default function EmployeesPage() {
                     {...inputProtection}
                     value={editForm.employee_code}
                     onChange={(e) =>
-                      setEditForm((v) => ({ ...v, employee_code: e.target.value.toUpperCase() }))
+                      setEditForm((v) => ({
+                        ...v,
+                        employee_code: e.target.value.toUpperCase(),
+                      }))
                     }
                     placeholder="e.g. SDE-001"
                   />
