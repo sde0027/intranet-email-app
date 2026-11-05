@@ -1,3 +1,4 @@
+import logo from "../assets/logo.webp";
 import { forwardRef, useEffect, useState } from "react";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
 
@@ -53,7 +54,8 @@ export const TextArea = forwardRef(function TextArea(
   ref,
 ) {
   const [historySafeName] = useState(
-    () => `intranet-textarea-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    () =>
+      `intranet-textarea-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
 
   return (
@@ -89,13 +91,14 @@ export function ConfirmDialog({
 
   if (!open) return null;
   const Icon = tone === "warning" ? ShieldAlert : AlertTriangle;
-  const confirmStyle = tone === "warning"
-    ? "bg-amber-600 hover:bg-amber-700 focus-visible:ring-amber-300"
-    : "bg-red-600 hover:bg-red-700 focus-visible:ring-red-300";
+  const confirmStyle =
+    tone === "warning"
+      ? "bg-amber-600 hover:bg-amber-700 focus-visible:ring-amber-300"
+      : "bg-red-600 hover:bg-red-700 focus-visible:ring-red-300";
 
   return (
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/45 px-4 py-6 backdrop-blur-[3px]"
+      className="fixed inset-0 z-100 grid place-items-center bg-slate-950/45 px-4 py-6 backdrop-blur-[3px]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !loading) onCancel?.();
       }}
@@ -110,10 +113,16 @@ export function ConfirmDialog({
         <div className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
           <Icon size={21} />
         </div>
-        <h2 id="confirm-dialog-title" className="text-lg font-semibold tracking-tight text-slate-900">
+        <h2
+          id="confirm-dialog-title"
+          className="text-lg font-semibold tracking-tight text-slate-900"
+        >
           {title}
         </h2>
-        <p id="confirm-dialog-description" className="mt-2 text-sm leading-6 text-slate-600">
+        <p
+          id="confirm-dialog-description"
+          className="mt-2 text-sm leading-6 text-slate-600"
+        >
           {description}
         </p>
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -228,6 +237,46 @@ export function PageHeading({ eyebrow, title, description, action }) {
       </div>
       {action}
     </div>
+  );
+}
+
+export function AppLoadingScreen({
+  message = "Please wait…",
+  detail = "Preparing your workspace",
+}) {
+  return (
+    <main
+      className="relative grid min-h-screen place-items-center overflow-hidden bg-[#edf4f8] px-5 py-10 text-ink"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(36,89,135,.09),transparent_34%),radial-gradient(circle_at_85%_82%,rgba(8,127,167,.08),transparent_32%)]"
+      />
+      <section className="relative w-full max-w-sm rounded-3xl border border-white/90 bg-white/85 px-8 py-10 text-center shadow-[0_24px_70px_rgba(23,70,112,.12)] backdrop-blur-xl">
+        <img
+          src={logo}
+          alt=""
+          className="mx-auto size-14 rounded-full object-contain shadow-sm"
+        />
+        <p className="mt-4 text-[10px] font-bold uppercase tracking-[.2em] text-company/65">
+          Sri Datta Electronics
+        </p>
+        <div
+          className="mx-auto mb-4 mt-7 flex size-11 items-center justify-center rounded-full border-[3px] border-company/15 border-t-company animate-spin"
+          aria-hidden="true"
+        />
+        <h1 className="text-base font-semibold tracking-tight text-company-dark">
+          {message}
+        </h1>
+        <p className="mt-2 text-xs leading-5 text-muted">{detail}</p>
+        <div className="mx-auto mt-7 h-1 w-24 overflow-hidden rounded-full bg-company/10">
+          <div className="h-full w-1/2 animate-[loading-sweep_1.4s_ease-in-out_infinite] rounded-full bg-company" />
+        </div>
+      </section>
+    </main>
   );
 }
 

@@ -78,13 +78,16 @@ export default function MessagePage() {
           <span className="text-xs font-semibold uppercase tracking-[.12em] text-slate-400">
             Message
           </span>
-          <Button
-            variant="danger"
-            disabled={movingToTrash}
-            onClick={moveMessageToTrash}
-          >
-            <Archive size={16} /> {movingToTrash ? "Moving…" : "Move to trash"}
-          </Button>
+          {!email.is_sender && !email.is_deleted && (
+            <Button
+              variant="danger"
+              disabled={movingToTrash}
+              onClick={moveMessageToTrash}
+            >
+              <Archive size={16} />{" "}
+              {movingToTrash ? "Moving…" : "Move to trash"}
+            </Button>
+          )}
         </div>
         <div className="px-5 py-6 sm:px-8 sm:py-8">
           <h1 className="mb-8 wrap-break-word text-xl font-semibold leading-snug tracking-tight text-company-dark sm:text-2xl">

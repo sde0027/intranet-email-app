@@ -69,11 +69,8 @@ export default function ComposePage() {
       .map((v) => v.trim())
       .filter(Boolean)
       .map((value) => {
-        if (/^\d+$/.test(value)) {
-          const id = Number(value);
-          if (Number.isSafeInteger(id) && id > 0) return id;
-        }
         if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return value;
+        if (/^[A-Za-z0-9_-]{1,32}$/.test(value)) return value;
         throw new Error(
           `Invalid recipient: ${value}. Enter an employee ID or company email address.`,
         );
@@ -229,7 +226,7 @@ export default function ComposePage() {
               </div>
             </>
           )}
-          <div className="border-b border-slate-100 py-2 sm:pl-[92px]">
+          <div className="border-b border-slate-100 py-2 sm:pl-23">
             <button
               type="button"
               onClick={() => setShowCopies((v) => !v)}

@@ -10,7 +10,13 @@ import {
 import { useNavigate } from "react-router-dom";
 import PublicNav from "../components/PublicNav.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
-import { Alert, Button, Eyebrow, TextInput } from "../components/ui.jsx";
+import {
+  Alert,
+  AppLoadingScreen,
+  Button,
+  Eyebrow,
+  TextInput,
+} from "../components/ui.jsx";
 import bg from "../assets/jet.png";
 
 const products = [
@@ -41,7 +47,7 @@ const clientele = [
 
 export default function LoginPage() {
   const [mode, setMode] = useState("user"),
-    [email, setEmail] = useState(""),
+    [identifier, setIdentifier] = useState(""),
     [password, setPassword] = useState(""),
     [showPassword, setShowPassword] = useState(false),
     [errors, setErrors] = useState({}),
@@ -52,16 +58,15 @@ export default function LoginPage() {
   async function handleSubmit(event) {
     event.preventDefault();
     const next = {};
-    if (!email.trim()) next.email = "Enter your company email address.";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
-      next.email = "Enter a valid email address.";
+    if (!identifier.trim())
+      next.email = "Enter your employee ID or company email.";
     if (!password) next.password = "Enter your password.";
     setErrors(next);
     setMessage("");
     if (Object.keys(next).length) return;
     setBusy(true);
     try {
-      await signIn(email.trim(), password, mode);
+      await signIn(identifier.trim(), password, mode);
       navigate("/inbox", { replace: true });
     } catch (error) {
       setMessage(error.message);
@@ -74,6 +79,15 @@ export default function LoginPage() {
     setErrors({});
     setMessage("");
   };
+
+  if (busy) {
+    return (
+      <AppLoadingScreen
+        message="Signing you in…"
+        detail="Verifying your credentials and opening your workspace"
+      />
+    );
+  }
 
   return (
     <div className="relative isolate flex min-h-screen flex-col overflow-x-hidden bg-[#eaf2f5] text-ink">
@@ -129,7 +143,7 @@ export default function LoginPage() {
           </p>
         </section>
 
-        <section className="mx-auto w-full max-w-[460px] rounded-3xl border border-white/90 bg-white/64 p-6 shadow-[0_28px_80px_rgba(12,65,86,.14),0_2px_8px_rgba(12,65,86,.04)] backdrop-blur-2xl animate-[login-card-in_.55s_cubic-bezier(.2,.8,.2,1)_both] sm:p-8">
+        <section className="mx-auto w-full max-w-115 rounded-3xl border border-white/90 bg-white/64 p-6 shadow-[0_28px_80px_rgba(12,65,86,.14),0_2px_8px_rgba(12,65,86,.04)] backdrop-blur-2xl animate-[login-card-in_.55s_cubic-bezier(.2,.8,.2,1)_both] sm:p-8">
           <div className="mb-7 flex items-center gap-2.5">
             {/* <span className="grid size-[38px] place-items-center rounded-xl bg-[#e5f4f8] text-[#087fa1]">
               <ShieldCheck size={23} />
@@ -176,16 +190,16 @@ export default function LoginPage() {
               htmlFor="login-email"
               className="mb-2 text-[10px] font-bold text-[#34576a]"
             >
-              Company email
+              Employee ID or company email
             </label>
             <TextInput
               id="login-email"
-              type="email"
+              type="text"
               autoComplete="username"
-              placeholder="name@sridattaelectronics.com"
-              value={email}
+              placeholder="EMP-0001 or name@company.com"
+              value={identifier}
               onChange={(e) => {
-                setEmail(e.target.value);
+                setIdentifier(e.target.value);
                 setErrors((v) => ({ ...v, email: "" }));
               }}
               aria-invalid={Boolean(errors.email)}
@@ -236,7 +250,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               disabled={busy}
-              className="mt-6 min-h-[46px] w-full rounded-xl bg-gradient-to-r from-[#08799b] to-[#087fa7] text-[11px] font-bold shadow-[0_7px_18px_rgba(4,112,147,.18)] transition duration-200 hover:-translate-y-px hover:shadow-[0_10px_22px_rgba(4,112,147,.24)]"
+              className="mt-6 min-h-11.5 w-full rounded-xl bg-linear-to-r from-[#08799b] to-[#087fa7] text-[11px] font-bold shadow-[0_7px_18px_rgba(4,112,147,.18)] transition duration-200 hover:-translate-y-px hover:shadow-[0_10px_22px_rgba(4,112,147,.24)]"
             >
               {busy
                 ? "Signing in…"
@@ -253,7 +267,7 @@ export default function LoginPage() {
         </section>
 
         <section
-          className="mx-auto hidden w-full min-w-0 max-w-[430px] xl:block"
+          className="mx-auto hidden w-full min-w-0 max-w-107.5 xl:block"
           aria-label="Company capabilities"
         >
           <div className="mb-5">
@@ -266,15 +280,15 @@ export default function LoginPage() {
               into real solutions.
             </h2>
           </div>
-          <div className="h-[350px] overflow-hidden [mask-image:linear-gradient(transparent,black_9%,black_91%,transparent)]">
+          <div className="h-87.5 overflow-hidden mask-[linear-gradient(transparent,black_9%,black_91%,transparent)]">
             <div className="flex animate-[login-reel-up_42s_linear_infinite] flex-col gap-3 will-change-transform">
               {[...products, ...products].map(([name, desc], i) => (
                 <article
                   key={`${name}-${i}`}
                   aria-hidden={i >= products.length}
-                  className="flex min-h-[120px] items-start gap-3 rounded-2xl border border-[#0c536f]/10 bg-white/70 p-4 shadow-[0_8px_26px_rgba(17,70,91,.045)] backdrop-blur-xl"
+                  className="flex min-h-30 items-start gap-3 rounded-2xl border border-[#0c536f]/10 bg-white/70 p-4 shadow-[0_8px_26px_rgba(17,70,91,.045)] backdrop-blur-xl"
                 >
-                  <span className="grid size-[39px] shrink-0 place-items-center rounded-xl bg-[#e3f3f7] text-[#0785a7]">
+                  <span className="grid size-9.75 shrink-0 place-items-center rounded-xl bg-[#e3f3f7] text-[#0785a7]">
                     {i % 2 ? <CircuitBoard size={21} /> : <Cpu size={21} />}
                   </span>
                   <div className="grid gap-1.5">
@@ -296,7 +310,7 @@ export default function LoginPage() {
             Technology shaped around real-world requirements.
           </p>
         </section>
-        <section className="mx-auto w-full max-w-[460px] xl:hidden">
+        <section className="mx-auto w-full max-w-115 xl:hidden">
           <p className="mb-3 text-[9px] font-bold tracking-[.2em] text-[#1488a9]">
             WHAT WE DO
           </p>
@@ -315,7 +329,7 @@ export default function LoginPage() {
           </div>
         </section>
       </main>
-      <footer className="mx-auto flex w-full max-w-[1500px] flex-wrap justify-between gap-2 px-5 py-4 text-[10px] text-[#011928] sm:px-8 lg:px-12">
+      <footer className="mx-auto flex w-full max-w-375 flex-wrap justify-between gap-2 px-5 py-4 text-[10px] text-[#011928] sm:px-8 lg:px-12">
         <span>
           © {new Date().getFullYear()} Sri Datta Electronics Pvt. Ltd.
         </span>

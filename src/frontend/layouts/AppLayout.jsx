@@ -16,7 +16,12 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import Brand from "../components/Brand.jsx";
-import { Avatar, Button, IconButton } from "../components/ui.jsx";
+import {
+  Avatar,
+  Button,
+  ConfirmDialog,
+  IconButton,
+} from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 const companyPortals = [
@@ -47,10 +52,12 @@ export default function AppLayout() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   async function handleLogout() {
     setSigningOut(true);
     try {
       await signOut();
+      setConfirmSignOut(false);
       navigate("/", { replace: true });
     } finally {
       setSigningOut(false);
@@ -61,7 +68,7 @@ export default function AppLayout() {
 
   return (
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-[#f3f7fb]">
-      <header className="z-20 flex h-[72px] shrink-0 items-center gap-3 border-b border-line/80 bg-white/95 px-4 shadow-[0_2px_10px_rgba(20,55,85,.045)] backdrop-blur-xl sm:px-6 lg:px-8">
+      <header className="z-20 flex h-18 shrink-0 items-center gap-3 border-b border-line/80 bg-white/95 px-4 shadow-[0_2px_10px_rgba(20,55,85,.045)] backdrop-blur-xl sm:px-6 lg:px-8">
         <IconButton
           className="md:hidden"
           onClick={() => setMobileOpen((v) => !v)}
@@ -112,7 +119,7 @@ export default function AppLayout() {
         <aside
           className={`absolute inset-y-0 left-0 z-30 flex w-72 shrink-0 flex-col border-r border-line/80 bg-white px-4 py-6 shadow-[4px_0_18px_rgba(20,55,85,.025)] transition-transform duration-300 ease-out md:relative md:z-0 md:translate-x-0 ${mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"}`}
         >
-          <div className="mb-5 flex items-center gap-3 rounded-2xl border border-slate-100 bg-gradient-to-br from-white to-slate-50 p-3.5 shadow-sm">
+          <div className="mb-5 flex items-center gap-3 rounded-2xl border border-slate-100 bg-linear-to-br from-white to-slate-50 p-3.5 shadow-sm">
             <Avatar
               name={user?.name}
               photo={user?.profile_photo_url}
@@ -126,7 +133,10 @@ export default function AppLayout() {
                 {user?.designation ||
                   (user?.role === "ADMIN" ? "Administrator" : "Employee")}
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-slate-400">
+              <p className="mt-0.5 truncate text-[11px] font-semibold tracking-wide text-company">
+                ID: {user?.employee_code}
+              </p>
+              <p className="truncate text-[11px] text-slate-400">
                 {user?.email}
               </p>
             </div>
@@ -179,7 +189,7 @@ export default function AppLayout() {
               network workspace
             </div>
             <button
-              onClick={handleLogout}
+              onClick={() => setConfirmSignOut(true)}
               disabled={signingOut}
               className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-slate-500 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
             >
@@ -189,11 +199,23 @@ export default function AppLayout() {
           </div>
         </aside>
         <main className="min-w-0 flex-1 scroll-smooth overflow-y-auto overscroll-y-contain px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 xl:px-12">
-          <div key={location.pathname} className="mx-auto w-full max-w-375 animate-[content-enter_.22s_ease-out]">
+          <div
+            key={location.pathname}
+            className="mx-auto w-full max-w-375 animate-[content-enter_.22s_ease-out]"
+          >
             <Outlet />
           </div>
         </main>
       </div>
+      <ConfirmDialog
+        open={confirmSignOut}
+        title="Sign out of your account?"
+        description="You will be signed out of this browser session. Any unsaved changes may be lost."
+        confirmLabel="Sign out"
+        loading={signingOut}
+        onCancel={() => setConfirmSignOut(false)}
+        onConfirm={handleLogout}
+      />
     </div>
   );
 }

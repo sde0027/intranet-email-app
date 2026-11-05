@@ -13,7 +13,7 @@ export class EmailServiceError extends Error {
   }
 }
 
-function validateRecipients(to, cc, bcc, { requireTo = true } = {}) {
+function validateRecipients(to, cc, bcc, { requireTo = true, allowInternalIds = false } = {}) {
   const groups = [
     { type: "TO", values: to },
     { type: "CC", values: cc },
@@ -30,15 +30,19 @@ function validateRecipients(to, cc, bcc, { requireTo = true } = {}) {
     }
 
     for (const value of group.values) {
-      const validId = Number.isSafeInteger(value) && value > 0;
+      const validInternalId = allowInternalIds && Number.isSafeInteger(value) && value > 0;
       const validEmail =
         typeof value === "string" &&
         value.trim() === value &&
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+      const validEmployeeCode =
+        typeof value === "string" &&
+        value.trim() === value &&
+        /^[A-Za-z0-9_-]{1,32}$/.test(value);
 
-      if (!validId && !validEmail) {
+      if (!validInternalId && !validEmail && !validEmployeeCode) {
         throw new EmailServiceError(
-          "Recipients must be positive employee IDs or valid email addresses.",
+          "Recipients must be employee IDs or valid company email addresses.",
           400,
           "INVALID_RECIPIENT",
         );
@@ -57,12 +61,15 @@ function validateRecipients(to, cc, bcc, { requireTo = true } = {}) {
   return groups;
 }
 
-// Resolve both legacy numeric IDs and email addresses to active employee IDs.
-// Email matching is case-insensitive because users.email uses COLLATE NOCASE.
+// Resolve custom employee IDs and email addresses to internal user IDs.
+// Numeric database IDs are accepted only for trusted internal reply flows.
 function resolveRecipientGroups(to, cc = [], bcc = [], options = {}) {
   const groups = validateRecipients(to, cc, bcc, options);
-  const findById = db.prepare(`
+  const findByInternalId = db.prepare(`
     SELECT id FROM users WHERE id = ? AND is_active = 1
+  `);
+  const findByEmployeeCode = db.prepare(`
+    SELECT id FROM users WHERE employee_code = ? COLLATE NOCASE AND is_active = 1
   `);
   const findByEmail = db.prepare(`
     SELECT id FROM users WHERE email = ? COLLATE NOCASE AND is_active = 1
@@ -71,14 +78,15 @@ function resolveRecipientGroups(to, cc = [], bcc = [], options = {}) {
   const resolvedGroups = groups.map((group) => ({
     type: group.type,
     ids: group.values.map((value) => {
-      const employee =
-        typeof value === "number"
-          ? findById.get(value)
-          : findByEmail.get(value);
+      const employee = typeof value === "number"
+        ? findByInternalId.get(value)
+        : value.includes("@")
+          ? findByEmail.get(value)
+          : findByEmployeeCode.get(value);
 
       if (!employee) {
         throw new EmailServiceError(
-          "One or more recipients do not exist or are inactive.",
+          "One or more recipients do not exist or are inactive. Check the employee ID or email address.",
           400,
           "INVALID_RECIPIENT",
         );
@@ -166,12 +174,17 @@ export function sendEmailService({
   body = "",
   parentEmailId = null,
   attachments = [],
+  allowInternalRecipientIds = false,
 }) {
   // 1. Validate message data.
   validateMessage(subject, body);
 
-  // 2. Resolve employee IDs and email addresses to active employee IDs.
-  const groups = resolveRecipientGroups(to, cc, bcc, { requireTo: true });
+  // Public compose/forward requests accept custom employee IDs or email only.
+  // Internal reply flows may pass trusted numeric IDs loaded from the database.
+  const groups = resolveRecipientGroups(to, cc, bcc, {
+    requireTo: true,
+    allowInternalIds: allowInternalRecipientIds,
+  });
 
   // 5. Prepare database statements.
   const insertEmail = db.prepare(`
@@ -289,6 +302,7 @@ export function getSentService({ userId, page, limit }) {
     FROM emails
     WHERE sender_id = ?
       AND status = 'SENT'
+      AND is_sender_deleted = 0
   `);
 
   // Retrieve the current page of sent messages.
@@ -302,6 +316,7 @@ export function getSentService({ userId, page, limit }) {
     FROM emails
     WHERE sender_id = ?
       AND status = 'SENT'
+      AND is_sender_deleted = 0
     ORDER BY sent_at DESC, id DESC
     LIMIT ? OFFSET ?
   `);
@@ -464,7 +479,7 @@ export function getEmailByIdService({ emailId, userId }) {
   const userRecipient = db
     .prepare(
       `
-      SELECT recipient_type, is_read
+      SELECT recipient_type, is_read, is_deleted
       FROM email_recipients
       WHERE email_id = ?
         AND recipient_id = ?
@@ -550,6 +565,7 @@ export function getEmailByIdService({ emailId, userId }) {
     is_sender: isSender,
     recipient_type: userRecipient?.recipient_type ?? null,
     is_read: userRecipient?.is_read ?? null,
+    is_deleted: userRecipient?.is_deleted ?? null,
 
     attachments,
   };
@@ -925,6 +941,7 @@ export function replyToEmailService({
     body,
     parentEmailId: original.id,
     attachments,
+    allowInternalRecipientIds: true,
   });
 }
 
@@ -988,6 +1005,7 @@ export function replyAllToEmailService({
     body,
     parentEmailId: original.id,
     attachments,
+    allowInternalRecipientIds: true,
   });
 }
 
@@ -1032,6 +1050,33 @@ export function forwardEmailService({
     parentEmailId: original.id,
     attachments,
   });
+}
+
+// Remove messages from the sender's Sent folder without affecting recipients' copies.
+export function bulkDeleteSentEmailService({ emailIds, senderId }) {
+  const placeholders = emailIds.map(() => "?").join(", ");
+  const deleteSelected = db.prepare(`
+    UPDATE emails
+    SET is_sender_deleted = 1
+    WHERE sender_id = ?
+      AND status = 'SENT'
+      AND is_sender_deleted = 0
+      AND id IN (${placeholders})
+  `);
+
+  const transaction = db.transaction(() => {
+    const result = deleteSelected.run(senderId, ...emailIds);
+    if (result.changes !== emailIds.length) {
+      throw new EmailServiceError(
+        "One or more selected sent messages are no longer available. Refresh and try again.",
+        409,
+        "BULK_SENT_DELETE_CONFLICT",
+      );
+    }
+    return { deleted: result.changes };
+  });
+
+  return transaction();
 }
 
 const TRASH_RETENTION_DAYS = 30;
@@ -1184,6 +1229,64 @@ export function restoreEmailService({ emailId, recipientId }) {
   }
 
   return { id: emailId, is_deleted: 0 };
+}
+
+// Restore multiple Trash entries atomically for the current recipient.
+export function bulkRestoreEmailService({ emailIds, recipientId }) {
+  const placeholders = emailIds.map(() => "?").join(", ");
+  const restoreSelected = db.prepare(`
+    UPDATE email_recipients
+    SET is_deleted = 0, deleted_at = NULL
+    WHERE recipient_id = ?
+      AND is_deleted = 1
+      AND email_id IN (${placeholders})
+      AND EXISTS (
+        SELECT 1 FROM emails
+        WHERE emails.id = email_recipients.email_id
+          AND emails.status = 'SENT'
+      )
+  `);
+
+  return db.transaction(() => {
+    const result = restoreSelected.run(recipientId, ...emailIds);
+    if (result.changes !== emailIds.length) {
+      throw new EmailServiceError(
+        "One or more selected messages are no longer available in your Trash. Refresh and try again.",
+        409,
+        "BULK_TRASH_RESTORE_CONFLICT",
+      );
+    }
+    return { restored: result.changes };
+  })();
+}
+
+// Permanently delete multiple Trash entries for this recipient only.
+// The original messages and attachment files remain intact for other recipients.
+export function bulkPermanentlyDeleteEmailService({ emailIds, recipientId }) {
+  const placeholders = emailIds.map(() => "?").join(", ");
+  const deleteSelected = db.prepare(`
+    DELETE FROM email_recipients
+    WHERE recipient_id = ?
+      AND is_deleted = 1
+      AND email_id IN (${placeholders})
+      AND EXISTS (
+        SELECT 1 FROM emails
+        WHERE emails.id = email_recipients.email_id
+          AND emails.status = 'SENT'
+      )
+  `);
+
+  return db.transaction(() => {
+    const result = deleteSelected.run(recipientId, ...emailIds);
+    if (result.changes !== emailIds.length) {
+      throw new EmailServiceError(
+        "One or more selected messages are no longer available in your Trash. Refresh and try again.",
+        409,
+        "BULK_TRASH_DELETE_CONFLICT",
+      );
+    }
+    return { deleted: result.changes };
+  })();
 }
 
 // Permanently remove only this user's Trash entry.

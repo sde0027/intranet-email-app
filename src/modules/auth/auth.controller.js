@@ -1,8 +1,32 @@
 import { login } from "./auth.service.js";
+import { db } from "../../database/connection.js";
 import { SESSION_TTL_MS } from "../../middleware/sqlite-session-store.js";
 
 export async function loginController(req, res, next) {
   try {
+    if (req.session?.user?.id && Number(req.session.authExpiresAt) > Date.now()) {
+      const currentUser = db
+        .prepare("SELECT is_active FROM users WHERE id = ?")
+        .get(req.session.user.id);
+
+      if (currentUser?.is_active) {
+        return res.status(409).json({
+          code: "SESSION_ALREADY_ACTIVE",
+          error: "An account is already signed in on this browser. Please sign out from the existing session before signing in here.",
+        });
+      }
+
+      // The account is no longer allowed to use this session. Clear it and
+      // ask the client to retry sign-in with a fresh browser session.
+      return req.session.destroy((error) => {
+        if (error) return next(error);
+        res.clearCookie("intranet.sid", { path: "/" });
+        return res.status(401).json({
+          error: "Your previous session is no longer valid. Please sign in again.",
+        });
+      });
+    }
+
     const user = await login(req.body ?? {});
 
     // Regenerate the session ID after successful authentication.

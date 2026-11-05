@@ -15,6 +15,7 @@ import {
 } from "../components/ui.jsx";
 
 const emptyCreateForm = {
+  employee_code: "",
   name: "",
   email: "",
   password: "",
@@ -90,6 +91,7 @@ export default function EmployeesPage() {
   function openEditor(employee) {
     setEditing(employee);
     setEditForm({
+      employee_code: employee.employee_code || "",
       name: employee.name || "",
       email: employee.email || "",
       designation: employee.designation || "",
@@ -104,6 +106,7 @@ export default function EmployeesPage() {
     setEditing(null);
     setPhotoPreview("");
     setEditForm({
+      employee_code: "",
       name: "",
       email: "",
       designation: "",
@@ -179,7 +182,7 @@ export default function EmployeesPage() {
     }
   }
   const visible = employees.filter((employee) =>
-    `${employee.name} ${employee.email} ${employee.role} ${employee.designation || ""}`
+    `${employee.employee_code} ${employee.name} ${employee.email} ${employee.role} ${employee.designation || ""}`
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
@@ -218,6 +221,20 @@ export default function EmployeesPage() {
             Create employee account
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Field label="Employee ID">
+              <TextInput
+                required
+                minLength={1}
+                maxLength={32}
+                name="intranet-employee-create-code"
+                {...inputProtection}
+                value={form.employee_code}
+                onChange={(e) =>
+                  setForm((v) => ({ ...v, employee_code: e.target.value.toUpperCase() }))
+                }
+                placeholder="e.g. SDE-001"
+              />
+            </Field>
             <Field label="Full name">
               <TextInput
                 required
@@ -334,6 +351,9 @@ export default function EmployeesPage() {
                   <p className="truncate text-sm font-semibold text-slate-800">
                     {employee.name}
                   </p>
+                  <p className="truncate text-[11px] font-semibold tracking-wide text-company">
+                    {employee.employee_code}
+                  </p>
                   <p className="truncate text-xs text-muted">
                     {employee.designation || employee.email}
                   </p>
@@ -440,6 +460,20 @@ export default function EmployeesPage() {
                 </small>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Employee ID">
+                  <TextInput
+                    required
+                    minLength={2}
+                    maxLength={32}
+                    name="intranet-employee-profile-code"
+                    {...inputProtection}
+                    value={editForm.employee_code}
+                    onChange={(e) =>
+                      setEditForm((v) => ({ ...v, employee_code: e.target.value.toUpperCase() }))
+                    }
+                    placeholder="e.g. SDE-001"
+                  />
+                </Field>
                 <Field label="Full name">
                   <TextInput
                     required

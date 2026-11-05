@@ -46,6 +46,9 @@ export default function MessageList({ folder, title, subtitle }) {
   const [actionBusy, setActionBusy] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmSentDelete, setConfirmSentDelete] = useState(false);
+  const [confirmTrashRestore, setConfirmTrashRestore] = useState(false);
+  const [confirmTrashDelete, setConfirmTrashDelete] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -108,7 +111,10 @@ export default function MessageList({ folder, title, subtitle }) {
       setActionBusy(false);
     }
   }
-  const selectableRows = folder === "inbox" ? filtered : [];
+  const selectableRows =
+    folder === "inbox" || folder === "sent" || folder === "trash"
+      ? filtered
+      : [];
   const allVisibleSelected =
     selectableRows.length > 0 &&
     selectableRows.every((message) => selectedIds.includes(message.id));
@@ -137,6 +143,54 @@ export default function MessageList({ folder, title, subtitle }) {
     try {
       await emails.bulkMoveToTrash(selectedIds);
       setSelectedIds([]);
+      setRefresh((value) => value + 1);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function deleteSelectedSent() {
+    if (selectedIds.length === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    setError("");
+    try {
+      await emails.bulkDeleteSent(selectedIds);
+      setSelectedIds([]);
+      setConfirmSentDelete(false);
+      setRefresh((value) => value + 1);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function restoreSelectedTrash() {
+    if (selectedIds.length === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    setError("");
+    try {
+      await emails.bulkRestoreTrash(selectedIds);
+      setSelectedIds([]);
+      setConfirmTrashRestore(false);
+      setRefresh((value) => value + 1);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function permanentlyDeleteSelectedTrash() {
+    if (selectedIds.length === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    setError("");
+    try {
+      await emails.bulkPermanentlyDeleteTrash(selectedIds);
+      setSelectedIds([]);
+      setConfirmTrashDelete(false);
       setRefresh((value) => value + 1);
     } catch (e) {
       setError(e.message);
@@ -199,36 +253,65 @@ export default function MessageList({ folder, title, subtitle }) {
         </div>
       )}
 
-      {folder === "inbox" && !loading && filtered.length > 0 && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-company/10 bg-white px-4 py-3 shadow-[0_2px_10px_rgba(25,55,85,.035)]">
-          <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-slate-600">
-            <input
-              type="checkbox"
-              checked={allVisibleSelected}
-              onChange={toggleAllVisible}
-              className="size-4 rounded border-slate-300 accent-company focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/25 focus-visible:ring-offset-2"
-              aria-label="Select all visible inbox messages"
-            />
-            Select all
-          </label>
-          <div className="flex items-center gap-3">
-            <span className="text-xs tabular-nums text-muted">
-              {selectedIds.length} selected
-            </span>
-            <Button
-              variant="danger"
-              disabled={selectedIds.length === 0 || bulkBusy}
-              onClick={moveSelectedToTrash}
-              className="min-h-9 rounded-xl px-3.5 py-2 text-xs"
-            >
-              <Archive size={15} />
-              {bulkBusy
-                ? "Moving…"
-                : `Move to Trash${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
-            </Button>
+      {(folder === "inbox" || folder === "sent" || folder === "trash") &&
+        !loading &&
+        filtered.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-company/10 bg-white px-4 py-2.5 shadow-[0_2px_10px_rgba(25,55,85,.035)]">
+            <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleAllVisible}
+                className="size-4 rounded border-slate-300 accent-company focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-company/25 focus-visible:ring-offset-2"
+                aria-label={`Select all visible ${folder} messages`}
+              />
+              Select all
+            </label>
+            <div className="flex items-center gap-3">
+              <span className="text-xs tabular-nums text-muted">
+                {selectedIds.length} selected
+              </span>
+              <Button
+                variant="danger"
+                disabled={selectedIds.length === 0 || bulkBusy}
+                onClick={
+                  folder === "inbox"
+                    ? moveSelectedToTrash
+                    : folder === "sent"
+                      ? () => setConfirmSentDelete(true)
+                      : () => setConfirmTrashDelete(true)
+                }
+                className="min-h-9 rounded-xl px-3.5 py-2 text-xs"
+              >
+                {folder === "inbox" ? (
+                  <Archive size={15} />
+                ) : (
+                  <Trash2 size={15} />
+                )}
+                {bulkBusy
+                  ? folder === "inbox"
+                    ? "Moving…"
+                    : "Deleting…"
+                  : folder === "inbox"
+                    ? `Move to Trash${selectedIds.length ? ` (${selectedIds.length})` : ""}`
+                    : folder === "trash"
+                      ? `Delete permanently${selectedIds.length ? ` (${selectedIds.length})` : ""}`
+                      : `Delete${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
+              </Button>
+              {folder === "trash" && (
+                <Button
+                  variant="secondary"
+                  disabled={selectedIds.length === 0 || bulkBusy}
+                  onClick={() => setConfirmTrashRestore(true)}
+                  className="min-h-9 rounded-xl px-3.5 py-2 text-xs"
+                >
+                  <Undo2 size={15} />
+                  Restore{selectedIds.length ? ` (${selectedIds.length})` : ""}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {loading ? (
         <LoadingState>Loading {title.toLowerCase()}…</LoadingState>
@@ -280,9 +363,11 @@ export default function MessageList({ folder, title, subtitle }) {
                     openMessage(message);
                   }
                 }}
-                className={`group relative grid min-h-17 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-slate-300/64 px-4 py-3.5 transition-[transform,box-shadow,background-color] duration-200 ease-out last:border-b-0 hover:z-1 hover:-translate-y-px hover:shadow-[0_5px_14px_rgba(20,50,100,.18)] hover:bg-[#f5f8fc] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-company sm:grid-cols-[minmax(130px,210px)_minmax(0,1fr)_76px_auto] sm:gap-4 sm:px-5 ${unread ? "bg-[#f7faff]" : "bg-white"} ${folder === "inbox" ? "pl-12" : ""} ${selectedIds.includes(message.id) ? "bg-company-soft/65" : ""}`}
+                className={`group relative grid min-h-17 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-slate-300/64 px-4 py-2 transition-[transform,box-shadow,background-color] duration-200 ease-out last:border-b-0 hover:z-1 hover:-translate-y-px hover:shadow-[0_5px_14px_rgba(20,50,100,.18)] hover:bg-[#f5f8fc] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-company sm:grid-cols-[minmax(130px,210px)_minmax(0,1fr)_76px_auto] sm:gap-4 sm:px-5 ${unread ? "bg-[#f7faff]" : "bg-white"} ${folder === "inbox" || folder === "sent" || folder === "trash" ? "pl-12" : ""} ${selectedIds.includes(message.id) ? "bg-company-soft/65" : ""}`}
               >
-                {folder === "inbox" && (
+                {(folder === "inbox" ||
+                  folder === "sent" ||
+                  folder === "trash") && (
                   <label
                     className="absolute left-3 top-1/2 z-10 grid size-7 -translate-y-1/2 cursor-pointer place-items-center rounded-lg transition hover:bg-company-soft"
                     onClick={(event) => event.stopPropagation()}
@@ -312,7 +397,7 @@ export default function MessageList({ folder, title, subtitle }) {
                   >
                     {message.subject || "(No subject)"}
                   </strong>
-                  <span className="hidden min-w-0  flex-1 truncate text-[15px] text-slate-400 md:block">
+                  <span className="hidden min-w-0 flex-1 truncate text-[15px] text-slate-400 md:block">
                     - {(message.body || "").replace(/\s+/g, " ").slice(0, 140)}
                   </span>
                 </div>
@@ -329,7 +414,13 @@ export default function MessageList({ folder, title, subtitle }) {
                         title="Restore"
                         aria-label="Restore message"
                         onClick={(e) =>
-                          action(e, message.id, emails.restoreEmail)
+                          action(e, message.id, emails.restoreEmail, {
+                            title: "Restore this message?",
+                            description:
+                              "This message will be moved from Trash back to your Inbox.",
+                            confirmLabel: "Restore message",
+                            tone: "warning",
+                          })
                         }
                       >
                         <Undo2 size={16} />
@@ -406,10 +497,39 @@ export default function MessageList({ folder, title, subtitle }) {
         </div>
       </div>
       <ConfirmDialog
+        open={confirmSentDelete}
+        title="Delete selected sent messages?"
+        description="These messages will be removed from your Sent folder. Recipients' inbox copies will remain available. This action cannot be undone from your Sent folder."
+        confirmLabel="Delete messages"
+        loading={bulkBusy}
+        onCancel={() => setConfirmSentDelete(false)}
+        onConfirm={deleteSelectedSent}
+      />
+      <ConfirmDialog
+        open={confirmTrashRestore}
+        title="Restore selected messages?"
+        description={`The ${selectedIds.length} selected message(s) will be moved from Trash back to your Inbox.`}
+        confirmLabel="Restore messages"
+        tone="warning"
+        loading={bulkBusy}
+        onCancel={() => setConfirmTrashRestore(false)}
+        onConfirm={restoreSelectedTrash}
+      />
+      <ConfirmDialog
+        open={confirmTrashDelete}
+        title="Permanently delete selected messages?"
+        description={`The ${selectedIds.length} selected message(s) will be permanently removed from your Trash. This action cannot be undone.`}
+        confirmLabel="Delete permanently"
+        loading={bulkBusy}
+        onCancel={() => setConfirmTrashDelete(false)}
+        onConfirm={permanentlyDeleteSelectedTrash}
+      />
+      <ConfirmDialog
         open={Boolean(pendingAction)}
         title={pendingAction?.title}
         description={pendingAction?.description}
         confirmLabel={pendingAction?.confirmLabel}
+        tone={pendingAction?.tone}
         loading={actionBusy}
         onCancel={() => setPendingAction(null)}
         onConfirm={confirmPendingAction}

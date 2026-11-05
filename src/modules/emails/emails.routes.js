@@ -17,8 +17,11 @@ import {
   forwardEmail,
   moveEmailToTrash,
   bulkMoveEmailToTrash,
+  bulkDeleteSentEmail,
   getTrash,
   restoreEmail,
+  bulkRestoreEmail,
+  bulkPermanentlyDeleteEmail,
   getEmailById,
   permanentlyDeleteEmail,
 } from "./emails.controller.js";
@@ -35,7 +38,10 @@ const router = Router();
 router.post("/send", authenticate, uploadAttachments, sendEmail);
 router.get("/inbox", authenticate, getInbox);
 router.get("/sent", authenticate, getSent);
+router.post("/sent/bulk-delete", authenticate, bulkDeleteSentEmail);
 router.get("/trash", authenticate, getTrash);
+router.post("/trash/bulk-restore", authenticate, bulkRestoreEmail);
+router.post("/trash/bulk-permanent-delete", authenticate, bulkPermanentlyDeleteEmail);
 router.post("/bulk-trash", authenticate, bulkMoveEmailToTrash);
 
 // Static paths must be registered before /:id to avoid being captured as IDs.

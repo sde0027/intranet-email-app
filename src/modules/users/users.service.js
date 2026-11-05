@@ -13,7 +13,7 @@ export const profilePhotoDirectory = path.join(
 fs.mkdirSync(profilePhotoDirectory, { recursive: true });
 
 const employeeSelect = `
-  SELECT id, name, email, role, is_active, designation, phone,
+  SELECT id, employee_code, name, email, role, is_active, designation, phone,
          CASE WHEN profile_photo IS NULL THEN NULL
               ELSE '/api/employees/' || id || '/photo' END AS profile_photo_url,
          created_at
@@ -27,18 +27,20 @@ function validationError(message) {
 }
 
 export async function createEmployee(input = {}) {
-  const { name, email, password } = input ?? {};
+  const payload = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const { name, email, password } = payload;
+  const employeeCode = normalizeEmployeeCode(payload.employee_code);
   const designation = typeof input.designation === "string" ? input.designation.trim() : "";
   const phone = typeof input.phone === "string" ? input.phone.trim() : "";
 
   if (typeof name !== "string" || typeof email !== "string" || typeof password !== "string") {
-    throw validationError("Name, email, and password are required.");
+    throw validationError("Name, employee ID, email, and password are required.");
   }
 
   const cleanName = name.trim();
   const cleanEmail = email.trim().toLowerCase();
-  if (!cleanName || !cleanEmail || !password) {
-    throw validationError("Name, email, and password are required.");
+  if (!cleanName || !cleanEmail || !password || !employeeCode) {
+    throw validationError("Name, employee ID, email, and password are required.");
   }
   if (cleanName.length > 120) throw validationError("Name must be 120 characters or fewer.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw validationError("Enter a valid email address.");
@@ -48,13 +50,16 @@ export async function createEmployee(input = {}) {
   const passwordHash = await argon2.hash(password);
   try {
     const result = db.prepare(`
-      INSERT INTO users (name, email, password_hash, designation, phone)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(cleanName, cleanEmail, passwordHash, designation, phone);
+      INSERT INTO users (employee_code, name, email, password_hash, designation, phone)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(employeeCode, cleanName, cleanEmail, passwordHash, designation, phone);
     return db.prepare(`${employeeSelect} WHERE id = ?`).get(result.lastInsertRowid);
   } catch (error) {
     if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
-      const conflict = new Error("An account with this email already exists.");
+      const codeOwner = db.prepare("SELECT 1 FROM users WHERE employee_code = ? COLLATE NOCASE").get(employeeCode);
+      const conflict = new Error(codeOwner
+        ? "This employee ID is already assigned. Choose a different ID."
+        : "An account with this email already exists.");
       conflict.statusCode = 409;
       throw conflict;
     }
@@ -95,6 +100,15 @@ export function updateEmployeeStatus(id, isActive) {
   return db.prepare(`${employeeSelect} WHERE id = ?`).get(employeeId);
 }
 
+function normalizeEmployeeCode(value) {
+  if (typeof value !== "string") throw validationError("Employee ID is required.");
+  const code = value.trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9_-]{0,31}$/.test(code)) {
+    throw validationError("Employee ID must be 1–32 characters and contain only letters, numbers, hyphens, or underscores.");
+  }
+  return code;
+}
+
 function validateProfileFields(designation, phone) {
   if (typeof designation !== "string" || designation.length > 120) {
     throw validationError("Designation must be 120 characters or fewer.");
@@ -114,7 +128,7 @@ export function updateEmployeeProfile({ id, input = {}, photo }) {
   }
 
   const current = db.prepare(
-    "SELECT id, name, email, designation, phone, profile_photo FROM users WHERE id = ?",
+    "SELECT id, employee_code, name, email, designation, phone, profile_photo FROM users WHERE id = ?",
   ).get(employeeId);
   if (!current) {
     const error = new Error("Employee not found.");
@@ -124,6 +138,20 @@ export function updateEmployeeProfile({ id, input = {}, photo }) {
 
   const has = (field) => Object.prototype.hasOwnProperty.call(input, field);
   const updates = {};
+
+  if (has("employee_code")) {
+    const employeeCode = normalizeEmployeeCode(input.employee_code);
+    if (!employeeCode) throw validationError("Employee ID is required.");
+    const codeOwner = db.prepare(
+      "SELECT id FROM users WHERE employee_code = ? COLLATE NOCASE AND id <> ?",
+    ).get(employeeCode, employeeId);
+    if (codeOwner) {
+      const conflict = new Error("This employee ID is already assigned. Choose a different ID.");
+      conflict.statusCode = 409;
+      throw conflict;
+    }
+    updates.employee_code = employeeCode;
+  }
 
   if (has("name")) {
     if (typeof input.name !== "string") throw validationError("Name must be a string.");
@@ -235,7 +263,12 @@ export function updateEmployeeProfile({ id, input = {}, photo }) {
       }
     }
     if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
-      const conflict = new Error("An account with this email already exists.");
+      const codeOwner = updates.employee_code
+        ? db.prepare("SELECT 1 FROM users WHERE employee_code = ? COLLATE NOCASE AND id <> ?").get(updates.employee_code, employeeId)
+        : null;
+      const conflict = new Error(codeOwner
+        ? "This employee ID is already assigned. Choose a different ID."
+        : "An account with this email already exists.");
       conflict.statusCode = 409;
       throw conflict;
     }

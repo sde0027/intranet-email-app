@@ -14,8 +14,11 @@ import {
   forwardEmailService,
   moveEmailToTrashService,
   bulkMoveEmailToTrashService,
+  bulkDeleteSentEmailService,
   getTrashService,
   restoreEmailService,
+  bulkRestoreEmailService,
+  bulkPermanentlyDeleteEmailService,
   permanentlyDeleteEmailService,
   getEmailByIdService,
   EmailServiceError,
@@ -661,6 +664,35 @@ export function bulkMoveEmailToTrash(req, res) {
   }
 }
 
+export function bulkDeleteSentEmail(req, res) {
+  try {
+    const { ids } = req.body ?? {};
+    if (
+      !Array.isArray(ids) ||
+      ids.length < 1 ||
+      ids.length > 100 ||
+      ids.some((id) => !Number.isSafeInteger(id) || id <= 0) ||
+      new Set(ids).size !== ids.length
+    ) {
+      return res.status(400).json({
+        error: "Provide between 1 and 100 unique, valid message IDs.",
+      });
+    }
+
+    const result = bulkDeleteSentEmailService({
+      emailIds: ids,
+      senderId: req.user.id,
+    });
+
+    return res.status(200).json({
+      message: `${result.deleted} sent message(s) deleted.`,
+      ...result,
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Delete selected sent messages");
+  }
+}
+
 export function getTrash(req, res) {
   try {
     const pagination = parsePagination(req.query);
@@ -679,6 +711,58 @@ export function getTrash(req, res) {
     return res.status(200).json(result);
   } catch (error) {
     return handleEmailActionError(error, res, "Retrieve Trash");
+  }
+}
+
+function validateBulkEmailIds(ids, res) {
+  if (
+    !Array.isArray(ids) ||
+    ids.length < 1 ||
+    ids.length > 100 ||
+    ids.some((id) => !Number.isSafeInteger(id) || id <= 0) ||
+    new Set(ids).size !== ids.length
+  ) {
+    res.status(400).json({
+      error: "Provide between 1 and 100 unique, valid message IDs.",
+    });
+    return false;
+  }
+  return true;
+}
+
+export function bulkRestoreEmail(req, res) {
+  try {
+    const { ids } = req.body ?? {};
+    if (!validateBulkEmailIds(ids, res)) return;
+
+    const result = bulkRestoreEmailService({
+      emailIds: ids,
+      recipientId: req.user.id,
+    });
+    return res.status(200).json({
+      message: `${result.restored} message(s) restored to Inbox.`,
+      ...result,
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Restore selected Trash messages");
+  }
+}
+
+export function bulkPermanentlyDeleteEmail(req, res) {
+  try {
+    const { ids } = req.body ?? {};
+    if (!validateBulkEmailIds(ids, res)) return;
+
+    const result = bulkPermanentlyDeleteEmailService({
+      emailIds: ids,
+      recipientId: req.user.id,
+    });
+    return res.status(200).json({
+      message: `${result.deleted} message(s) permanently deleted from your Trash.`,
+      ...result,
+    });
+  } catch (error) {
+    return handleEmailActionError(error, res, "Permanently delete selected Trash messages");
   }
 }
 

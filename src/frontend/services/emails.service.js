@@ -5,14 +5,37 @@ export const getSent = (page) => apiRequest(`/emails/sent${query(page)}`);
 export const getTrash = (page) => apiRequest(`/emails/trash${query(page)}`);
 export const getDrafts = (page) => apiRequest(`/emails/drafts${query(page)}`);
 export const getEmail = (id) => apiRequest(`/emails/${id}`);
-export const createDraft = (data) => apiRequest("/emails/drafts", { method: "POST", body: jsonBody(data) });
-export const updateDraft = (id, data) => apiRequest(`/emails/drafts/${id}`, { method: "PATCH", body: jsonBody(data) });
-export const deleteDraft = (id) => apiRequest(`/emails/drafts/${id}`, { method: "DELETE" });
-export const markRead = (id, read = true) => apiRequest(`/emails/${id}/${read ? "read" : "unread"}`, { method: "PATCH" });
-export const moveToTrash = (id) => apiRequest(`/emails/${id}`, { method: "DELETE" });
-export const bulkMoveToTrash = (ids) => apiRequest("/emails/bulk-trash", { method: "POST", body: jsonBody({ ids }) });
-export const restoreEmail = (id) => apiRequest(`/emails/${id}/restore`, { method: "PATCH" });
-export const permanentlyDelete = (id) => apiRequest(`/emails/${id}/permanent`, { method: "DELETE" });
+export const createDraft = (data) =>
+  apiRequest("/emails/drafts", { method: "POST", body: jsonBody(data) });
+export const updateDraft = (id, data) =>
+  apiRequest(`/emails/drafts/${id}`, { method: "PATCH", body: jsonBody(data) });
+export const deleteDraft = (id) =>
+  apiRequest(`/emails/drafts/${id}`, { method: "DELETE" });
+export const markRead = (id, read = true) =>
+  apiRequest(`/emails/${id}/${read ? "read" : "unread"}`, { method: "PATCH" });
+export const moveToTrash = (id) =>
+  apiRequest(`/emails/${id}`, { method: "DELETE" });
+export const bulkMoveToTrash = (ids) =>
+  apiRequest("/emails/bulk-trash", { method: "POST", body: jsonBody({ ids }) });
+export const bulkDeleteSent = (ids) =>
+  apiRequest("/emails/sent/bulk-delete", {
+    method: "POST",
+    body: jsonBody({ ids }),
+  });
+export const restoreEmail = (id) =>
+  apiRequest(`/emails/${id}/restore`, { method: "PATCH" });
+export const bulkRestoreTrash = (ids) =>
+  apiRequest("/emails/trash/bulk-restore", {
+    method: "POST",
+    body: jsonBody({ ids }),
+  });
+export const bulkPermanentlyDeleteTrash = (ids) =>
+  apiRequest("/emails/trash/bulk-permanent-delete", {
+    method: "POST",
+    body: jsonBody({ ids }),
+  });
+export const permanentlyDelete = (id) =>
+  apiRequest(`/emails/${id}/permanent`, { method: "DELETE" });
 export const sendEmail = (data, files = []) => {
   const body = new FormData();
   body.append("to", JSON.stringify(data.to));
@@ -24,9 +47,25 @@ export const sendEmail = (data, files = []) => {
   return apiRequest("/emails/send", { method: "POST", body });
 };
 export const getUnreadCount = () => apiRequest("/emails/unread-count");
-export const downloadAttachmentUrl = (id) => `/api/emails/attachments/${id}/download`;
+export const downloadAttachmentUrl = (id) =>
+  `/api/emails/attachments/${id}/download`;
 export const getDraft = (id) => apiRequest(`/emails/drafts/${id}`);
 
-const actionForm = (body, files = []) => { const form = new FormData(); form.append("body", body || ""); files.forEach(file => form.append("attachments", file)); return form; };
-export const replyEmail = (id, body, files = [], all = false) => apiRequest(`/emails/${id}/${all ? "reply-all" : "reply"}`, { method: "POST", body: actionForm(body, files) });
-export const forwardEmail = (id, data, files = []) => { const form = actionForm(data.body, files); form.append("to", JSON.stringify(data.to)); form.append("cc", JSON.stringify(data.cc || [])); form.append("bcc", JSON.stringify(data.bcc || [])); return apiRequest(`/emails/${id}/forward`, { method: "POST", body: form }); };
+const actionForm = (body, files = []) => {
+  const form = new FormData();
+  form.append("body", body || "");
+  files.forEach((file) => form.append("attachments", file));
+  return form;
+};
+export const replyEmail = (id, body, files = [], all = false) =>
+  apiRequest(`/emails/${id}/${all ? "reply-all" : "reply"}`, {
+    method: "POST",
+    body: actionForm(body, files),
+  });
+export const forwardEmail = (id, data, files = []) => {
+  const form = actionForm(data.body, files);
+  form.append("to", JSON.stringify(data.to));
+  form.append("cc", JSON.stringify(data.cc || []));
+  form.append("bcc", JSON.stringify(data.bcc || []));
+  return apiRequest(`/emails/${id}/forward`, { method: "POST", body: form });
+};

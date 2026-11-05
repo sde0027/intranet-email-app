@@ -6,18 +6,18 @@ import { InboxPage, SentPage, DraftsPage, TrashPage } from "../pages/MailboxPage
 import ComposePage from "../pages/ComposePage.jsx";
 import EmployeesPage from "../pages/EmployeesPage.jsx";
 import MessagePage from "../pages/MessagePage.jsx";
-import { LoadingState } from "../components/ui.jsx";
+import { AppLoadingScreen } from "../components/ui.jsx";
 
 function Protected({ children, admin = false }) {
   const { user, checking } = useAuth();
-  if (checking) return <LoadingState>Restoring your session…</LoadingState>;
+  if (checking) return <AppLoadingScreen message="Restoring your session…" detail="Checking your secure company access" />;
   if (!user) return <Navigate to="/" replace/>;
   if (admin && user.role !== "ADMIN") return <Navigate to="/inbox" replace/>;
   return children;
 }
 function GuestOnly() {
   const { user, checking } = useAuth();
-  if (checking) return <LoadingState>Restoring your session…</LoadingState>;
+  if (checking) return <AppLoadingScreen message="Restoring your session…" detail="Checking your secure company access" />;
   return user ? <Navigate to="/inbox" replace/> : <LoginPage/>;
 }
 export default function App() {
