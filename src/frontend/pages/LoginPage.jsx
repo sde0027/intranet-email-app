@@ -52,6 +52,7 @@ export default function LoginPage() {
     [showPassword, setShowPassword] = useState(false),
     [errors, setErrors] = useState({}),
     [message, setMessage] = useState(""),
+    [showForgotHelp, setShowForgotHelp] = useState(false),
     [busy, setBusy] = useState(false);
   const { signIn } = useAuth(),
     navigate = useNavigate();
@@ -78,6 +79,7 @@ export default function LoginPage() {
     setMode(value);
     setErrors({});
     setMessage("");
+    setShowForgotHelp(false);
   };
 
   if (busy) {
@@ -245,6 +247,23 @@ export default function LoginPage() {
               <small className="mt-1.5 text-[10px] text-red-600">
                 {errors.password}
               </small>
+            )}
+            <div className="py-1.5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowForgotHelp((value) => !value)}
+                className="text-[10px] font-semibold text-[#087fa1] transition hover:text-[#07516b] hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+            {showForgotHelp && (
+              <p
+                role="status"
+                className="mb-2 mt-0.5 rounded-lg border border-[#d8eaf0] bg-[#f2f9fb] px-3 py-2.5 text-[11px] leading-relaxed text-[#34576a]"
+              >
+                Please contact your administrator to reset your password.
+              </p>
             )}
             {message && <Alert>{message}</Alert>}
             <Button

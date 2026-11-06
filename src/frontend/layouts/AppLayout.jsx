@@ -5,6 +5,8 @@ import {
   FileText,
   Inbox,
   LogOut,
+  Pencil,
+  KeyRound,
   Menu,
   Package,
   Plus,
@@ -14,15 +16,18 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Brand from "../components/Brand.jsx";
 import {
   Avatar,
   Button,
   ConfirmDialog,
   IconButton,
+  TextInput,
 } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import * as authService from "../services/auth.service.js";
+import * as usersService from "../services/users.service.js";
 
 const companyPortals = [
   {
@@ -47,12 +52,21 @@ const links = [
 ];
 
 export default function AppLayout() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const photoInputRef = useRef(null);
   async function handleLogout() {
     setSigningOut(true);
     try {
@@ -63,6 +77,60 @@ export default function AppLayout() {
       setSigningOut(false);
     }
   }
+  async function handlePhotoChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setPhotoError("");
+    setPhotoBusy(true);
+    try {
+      const result = await usersService.updateMyProfilePhoto(file);
+      const photoUrl = result.employee.profile_photo_url;
+      setUser({
+        ...user,
+        ...result.employee,
+        profile_photo_url: photoUrl ? `${photoUrl}?v=${Date.now()}` : null,
+      });
+    } catch (error) {
+      setPhotoError(error.message || "Unable to update profile photo.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function handleChangePassword(event) {
+    event.preventDefault();
+    setPasswordError("");
+    if (newPassword.length < 8) {
+      setPasswordError("New password must contain at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New password and confirmation do not match.");
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      await authService.changePassword({ currentPassword, newPassword });
+      // The backend invalidates every session after a successful password change.
+      await signOut().catch(() => {});
+      navigate("/", { replace: true });
+    } catch (error) {
+      setPasswordError(error.message || "Unable to change password.");
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
+  function closePasswordDialog() {
+    if (passwordBusy) return;
+    setShowPasswordDialog(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError("");
+  }
+
   const navClass = ({ isActive }) =>
     `flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm transition-all duration-200 ${isActive ? "bg-company-soft font-semibold text-company" : "text-slate-600 hover:bg-slate-100 hover:text-company"}`;
 
@@ -119,13 +187,38 @@ export default function AppLayout() {
         <aside
           className={`absolute inset-y-0 left-0 z-30 flex w-72 shrink-0 flex-col border-r border-line/80 bg-white px-4 py-6 shadow-[4px_0_18px_rgba(20,55,85,.025)] transition-transform duration-300 ease-out md:relative md:z-0 md:translate-x-0 ${mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"}`}
         >
-          <div className="mb-5 flex items-center gap-3 rounded-2xl border border-slate-100 bg-linear-to-br from-white to-slate-50 p-3.5 shadow-sm">
-            <Avatar
-              name={user?.name}
-              photo={user?.profile_photo_url}
-              size="lg"
+          <div className="mb-5 flex items-center gap-2 rounded-2xl border border-slate-100 bg-linear-to-br from-white to-slate-50 p-3.5 shadow-sm">
+            <div className="relative inline-block">
+              <a
+                href={user?.profile_photo_url || undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Avatar
+                  name={user?.name}
+                  photo={user?.profile_photo_url}
+                  size="xl"
+                />
+              </a>
+              <button
+                type="button"
+                title="Change profile photo"
+                aria-label="Change profile photo"
+                disabled={photoBusy}
+                onClick={() => photoInputRef.current?.click()}
+                className="absolute right-0 bottom-1 grid size-5 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-company/30 hover:bg-company-soft hover:text-company disabled:opacity-50"
+              >
+                <Pencil size={9} />
+              </button>
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handlePhotoChange}
             />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1 pl-1">
               <p className="truncate text-sm font-semibold text-slate-800">
                 {user?.name}
               </p>
@@ -139,6 +232,12 @@ export default function AppLayout() {
               <p className="truncate text-[11px] text-slate-400">
                 {user?.email}
               </p>
+              {photoBusy && (
+                <p className="mt-1 text-[10px] text-company">Updating photo…</p>
+              )}
+              {photoError && (
+                <p className="mt-1 text-[10px] text-red-600">{photoError}</p>
+              )}
             </div>
           </div>
           <Button
@@ -189,6 +288,12 @@ export default function AppLayout() {
               network workspace
             </div>
             <button
+              onClick={() => setShowPasswordDialog(true)}
+              className="mb-1 flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-slate-500 transition hover:bg-company-soft hover:text-company"
+            >
+              <KeyRound size={17} /> Change password
+            </button>
+            <button
               onClick={() => setConfirmSignOut(true)}
               disabled={signingOut}
               className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-slate-500 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
@@ -207,6 +312,84 @@ export default function AppLayout() {
           </div>
         </main>
       </div>
+      {showPasswordDialog && (
+        <div className="fixed inset-0 z-100 grid place-items-center bg-slate-950/45 px-4 py-6 backdrop-blur-[3px]">
+          <section className="w-full max-w-md rounded-2xl border border-white/70 bg-white p-6 shadow-[0_24px_80px_rgba(15,35,60,.28)]">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Change password
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  You'll need to sign in again after changing it.
+                </p>
+              </div>
+              <IconButton
+                type="button"
+                aria-label="Close change password dialog"
+                onClick={closePasswordDialog}
+              >
+                <X size={18} />
+              </IconButton>
+            </div>
+            <form onSubmit={handleChangePassword} className="grid gap-3">
+              <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                Current password
+                <TextInput
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                New password
+                <TextInput
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  minLength={8}
+                  required
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                Confirm new password
+                <TextInput
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  minLength={8}
+                  required
+                />
+              </label>
+              {passwordError && (
+                <p
+                  role="alert"
+                  className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700"
+                >
+                  {passwordError}
+                </p>
+              )}
+              <div className="mt-2 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={closePasswordDialog}
+                  disabled={passwordBusy}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={passwordBusy}>
+                  {passwordBusy ? "Updating…" : "Update password"}
+                </Button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
       <ConfirmDialog
         open={confirmSignOut}
         title="Sign out of your account?"

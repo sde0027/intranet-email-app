@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import { fileTypeFromFile } from "file-type";
 import path from "node:path";
 import yauzl from "yauzl";
@@ -103,13 +104,32 @@ function validateOfficeArchive(filePath, extension) {
 
 // Check that a ZIP archive contains the required Office package entries.
 // We inspect archive metadata without extracting its contents.
+function hashFile(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", reject);
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+function removeTemporaryUpload(file) {
+  try {
+    fs.unlinkSync(file.path);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
 export async function validateUploadedFiles(files = []) {
+  // This map also deduplicates identical files uploaded together in one email.
+  const batchFilesByHash = new Map();
+
   for (const file of files) {
     const extension = path.extname(file.originalname).toLowerCase();
-
     const expectedMime = allowedTypes[extension];
 
-    // 1. Validate extension and client-provided MIME type.
     if (!expectedMime || expectedMime !== file.mimetype) {
       throw new AttachmentServiceError(
         `Unsupported or invalid file: ${file.originalname}`,
@@ -118,7 +138,6 @@ export async function validateUploadedFiles(files = []) {
       );
     }
 
-    // 2. TXT and CSV require content validation instead of magic signatures.
     if (textExtensions.has(extension)) {
       if (!validateTextFile(file.path)) {
         throw new AttachmentServiceError(
@@ -127,37 +146,89 @@ export async function validateUploadedFiles(files = []) {
           "INVALID_ATTACHMENT_TYPE",
         );
       }
-
-      continue;
-    }
-
-    // 3. Detect the actual file type using its binary signature.
-    const detectedType = await fileTypeFromFile(file.path);
-
-    if (!detectedType || detectedType.mime !== expectedMime) {
-      throw new AttachmentServiceError(
-        `File signature does not match its declared type: ${file.originalname}`,
-        400,
-        "INVALID_ATTACHMENT_TYPE",
-      );
-    }
-
-    // 4. Office documents need an additional structural validation.
-    if (officeRequiredEntries[extension]) {
-      const isValidOfficeDocument = await validateOfficeArchive(
-        file.path,
-        extension,
-      );
-
-      if (!isValidOfficeDocument) {
+    } else {
+      const detectedType = await fileTypeFromFile(file.path);
+      if (!detectedType || detectedType.mime !== expectedMime) {
         throw new AttachmentServiceError(
-          `Invalid Office document: ${file.originalname}`,
+          `File signature does not match its declared type: ${file.originalname}`,
           400,
           "INVALID_ATTACHMENT_TYPE",
         );
       }
+
+      if (officeRequiredEntries[extension]) {
+        const isValidOfficeDocument = await validateOfficeArchive(file.path, extension);
+        if (!isValidOfficeDocument) {
+          throw new AttachmentServiceError(
+            `Invalid Office document: ${file.originalname}`,
+            400,
+            "INVALID_ATTACHMENT_TYPE",
+          );
+        }
+      }
+    }
+
+    const contentHash = await hashFile(file.path);
+    file.contentHash = contentHash;
+
+    // Prefer an earlier file from this same upload batch.
+    let reusableStorageName = batchFilesByHash.get(contentHash) ?? null;
+
+    // Otherwise reuse a previously committed attachment if its physical file exists.
+    if (!reusableStorageName) {
+      const matches = db.prepare(`
+        SELECT storage_name
+        FROM attachments
+        WHERE content_hash = ?
+        ORDER BY id
+      `).all(contentHash);
+
+      reusableStorageName = matches.find((row) => {
+        const candidate = row.storage_name;
+        return typeof candidate === "string"
+          && path.basename(candidate) === candidate
+          && fs.existsSync(path.join(attachmentDirectory, candidate));
+      })?.storage_name ?? null;
+    }
+
+    if (reusableStorageName) {
+      // This upload is only a temporary duplicate. Keep the existing physical file.
+      removeTemporaryUpload(file);
+      file.filename = reusableStorageName;
+      file.reused = true;
+    } else {
+      batchFilesByHash.set(contentHash, file.filename);
+      file.reused = false;
     }
   }
+}
+
+/** Backfill content hashes for attachments created before migration 007. */
+export async function backfillAttachmentContentHashes() {
+  const rows = db.prepare(`
+    SELECT id, storage_name
+    FROM attachments
+    WHERE content_hash IS NULL
+  `).all();
+  const updateHash = db.prepare("UPDATE attachments SET content_hash = ? WHERE id = ? AND content_hash IS NULL");
+  let updated = 0;
+
+  for (const row of rows) {
+    if (typeof row.storage_name !== "string" || path.basename(row.storage_name) !== row.storage_name) {
+      continue;
+    }
+    const filePath = path.join(attachmentDirectory, row.storage_name);
+    if (!fs.existsSync(filePath)) continue;
+
+    try {
+      const contentHash = await hashFile(filePath);
+      updated += updateHash.run(contentHash, row.id).changes;
+    } catch (error) {
+      console.error(`Unable to calculate attachment hash for record ${row.id}:`, error.message);
+    }
+  }
+
+  return updated;
 }
 
 // Called inside the email sending database transaction.
@@ -167,10 +238,11 @@ export function insertAttachmentMetadata(emailId, files = []) {
       email_id,
       original_name,
       storage_name,
+      content_hash,
       mime_type,
       size_bytes
     )
-    VALUES (?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   for (const file of files) {
@@ -183,6 +255,7 @@ export function insertAttachmentMetadata(emailId, files = []) {
         .replace(/[\u0000-\u001f\u007f]/g, "")
         .slice(0, 255) || "attachment",
       file.filename,
+      file.contentHash ?? null,
       file.mimetype,
       file.size,
     );
@@ -308,6 +381,7 @@ export function getAttachmentDownloadService({ attachmentId, userId }) {
 // Remove uploaded files if the corresponding email transaction fails.
 export function cleanupUploadedFiles(files = []) {
   for (const file of files) {
+    if (file.reused) continue;
     try {
       fs.unlinkSync(file.path);
     } catch {

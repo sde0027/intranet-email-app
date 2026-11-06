@@ -166,6 +166,12 @@ export function Field({ label, htmlFor, children, hint, error }) {
 }
 
 export function Avatar({ name = "User", photo, size = "md", className = "" }) {
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [photo]);
+
   const initials = name
     .trim()
     .split(/\s+/)
@@ -173,20 +179,25 @@ export function Avatar({ name = "User", photo, size = "md", className = "" }) {
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+
   const dimensions =
     size === "sm"
       ? "size-8 text-[11px]"
       : size === "lg"
         ? "size-12 text-sm"
-        : "size-9 text-xs";
+        : size === "xl"
+          ? "size-16 text-sm"
+          : "size-9 text-xs";
+
   return (
     <span
       className={`inline-grid shrink-0 place-items-center overflow-hidden rounded-full bg-company-soft font-semibold text-company ${dimensions} ${className}`}
     >
-      {photo ? (
+      {photo && !imageError ? (
         <img
           src={photo}
           alt={`${name}'s profile`}
+          onError={() => setImageError(true)}
           className="size-full object-cover"
         />
       ) : (

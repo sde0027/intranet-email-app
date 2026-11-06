@@ -23,7 +23,7 @@ export async function apiRequest(path, options = {}) {
   if (!response.ok) {
     // A protected API response can reveal that the server-side session was
     // destroyed or expired. Clear stale authenticated views in every tab.
-    if (response.status === 401 && path !== "/auth/login") {
+    if (response.status === 401 && path !== "/auth/login" && path !== "/auth/change-password") {
       notifySessionInvalidated("server-rejected-session");
     }
     const error = new Error(

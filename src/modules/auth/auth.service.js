@@ -53,3 +53,87 @@ export async function login({ identifier, email, password }) {
     profile_photo_url: user.profile_photo ? `/api/employees/${user.id}/photo` : null,
   };
 }
+
+function passwordValidationError(message, statusCode = 400, code = "INVALID_PASSWORD") {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  return error;
+}
+
+function validateNewPassword(password) {
+  if (typeof password !== "string" || password.length < 8) {
+    throw passwordValidationError("New password must contain at least 8 characters.");
+  }
+}
+
+// Remove every persisted session belonging to an employee. Session payloads
+// are JSON written by express-session; malformed legacy rows are left alone.
+function deleteUserSessions(userId) {
+  const rows = db.prepare("SELECT sid, sess FROM sessions").all();
+  const removeSession = db.prepare("DELETE FROM sessions WHERE sid = ?");
+
+  for (const row of rows) {
+    try {
+      const sessionData = JSON.parse(row.sess);
+      if (Number(sessionData?.user?.id) === Number(userId)) {
+        removeSession.run(row.sid);
+      }
+    } catch {
+      // Do not let an unrelated malformed session prevent password changes.
+    }
+  }
+}
+
+export async function changeUserPassword({ userId, currentPassword, newPassword }) {
+  if (typeof currentPassword !== "string" || !currentPassword) {
+    throw passwordValidationError("Current password is required.");
+  }
+  validateNewPassword(newPassword);
+
+  const user = db.prepare(
+    "SELECT id, password_hash FROM users WHERE id = ? AND is_active = 1",
+  ).get(userId);
+
+  if (!user) {
+    throw passwordValidationError("Account not found or inactive.", 404, "ACCOUNT_NOT_FOUND");
+  }
+
+  const currentMatches = await argon2.verify(user.password_hash, currentPassword);
+  if (!currentMatches) {
+    throw passwordValidationError("Current password is incorrect.", 401, "CURRENT_PASSWORD_INCORRECT");
+  }
+
+  if (await argon2.verify(user.password_hash, newPassword)) {
+    throw passwordValidationError("New password must be different from your current password.");
+  }
+
+  const passwordHash = await argon2.hash(newPassword);
+  const updateAndInvalidate = db.transaction(() => {
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
+    deleteUserSessions(userId);
+  });
+  updateAndInvalidate();
+
+  return { passwordChanged: true, sessionsInvalidated: true };
+}
+
+// Administrator-only password reset. The route enforcing ADMIN authorization
+// is the security boundary; this service still validates the target account.
+export async function resetUserPassword({ userId, newPassword }) {
+  validateNewPassword(newPassword);
+
+  const user = db.prepare("SELECT id FROM users WHERE id = ?").get(userId);
+  if (!user) {
+    throw passwordValidationError("Employee not found.", 404, "EMPLOYEE_NOT_FOUND");
+  }
+
+  const passwordHash = await argon2.hash(newPassword);
+  const resetAndInvalidate = db.transaction(() => {
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
+    deleteUserSessions(userId);
+  });
+  resetAndInvalidate();
+
+  return { passwordReset: true, sessionsInvalidated: true };
+}

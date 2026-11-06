@@ -9,7 +9,7 @@ This document describes the routes implemented by the current backend snapshot. 
 ## Authentication model
 
 - Authentication uses the server-side session cookie `intranet.sid`.
-- The cookie is HTTP-only, `SameSite=Lax`, and has an eight-hour rolling lifetime. `Secure` is controlled by `COOKIE_SECURE` (HTTPS is currently deferred).
+- The cookie is HTTP-only, `SameSite=Lax`, and has a fixed eight-hour lifetime that is not extended by activity. `Secure` is controlled by `COOKIE_SECURE` (HTTPS is currently deferred).
 - Send the cookie with every authenticated request. Browser clients should use `credentials: "include"`.
 - Successful login regenerates the session ID. The server stores the user ID and role in the session, then resolves the current account, active status, and role from SQLite on authenticated requests.
 - Inactive or deleted accounts are rejected with `401` and their session is destroyed.
@@ -23,7 +23,7 @@ This document describes the routes implemented by the current backend snapshot. 
 | Authenticated | Any active authenticated employee or admin |
 | Admin | Authenticated account with current database role `ADMIN` |
 
-Employees can retrieve their own profile at `GET /api/employees/me`. Profile editing and employee administration remain admin-only. Profile-photo retrieval is available to authenticated users.
+Employees can retrieve their own profile and update their own profile photo. General employee profile editing and employee administration remain admin-only. Profile-photo retrieval is available to authenticated users.
 
 ## Authentication endpoints
 
@@ -31,6 +31,7 @@ Employees can retrieve their own profile at `GET /api/employees/me`. Profile edi
 |---|---|---:|---:|
 | POST | `/api/auth/login` | Public; rate-limited | 200 |
 | POST | `/api/auth/logout` | Session-based | 200 |
+| POST | `/api/auth/change-password` | Authenticated | 200 |
 
 ### Login request
 
@@ -63,6 +64,21 @@ Logout success:
 { "message": "Logout successful." }
 ```
 
+### Change password
+
+`POST /api/auth/change-password`
+
+```json
+{
+  "currentPassword": "current-password",
+  "newPassword": "new-password"
+}
+```
+
+The new password must contain at least 8 characters and must differ from the current password. The current password is verified with Argon2. On success, all persisted sessions belonging to the employee are invalidated; the employee must sign in again. An incorrect current password returns `401`; validation errors return `400`.
+
+Forgot-password recovery is not exposed as a public API. The login page directs employees to contact their administrator.
+
 ## Employee endpoints
 
 All paths below are under `/api/employees`.
@@ -70,10 +86,12 @@ All paths below are under `/api/employees`.
 | Method | Path | Access | Success |
 |---|---|---|---:|
 | GET | `/me` | Authenticated | 200 |
+| PUT | `/me/photo` | Authenticated | 200 |
 | GET | `/:id/photo` | Authenticated | 200 image |
 | POST | `/` | Admin | 201 |
 | GET | `/` | Admin | 200 |
 | PATCH | `/:id/status` | Admin | 200 |
+| POST | `/:id/reset-password` | Admin | 200 |
 | PATCH | `/:id/profile` | Admin | 200 |
 
 ### Get current employee
@@ -144,6 +162,22 @@ Accepts JSON or `multipart/form-data`. Supported fields: `name`, `email`, `desig
 - Email is normalized and must be unique; duplicate email returns `409`.
 - Profile photos must be valid JPEG, PNG, or WebP and no larger than 5 MB.
 - Empty update requests return `400`.
+
+### Update own profile photo
+
+`PUT /api/employees/me/photo`
+
+Accepts `multipart/form-data` with one file field named `profile_photo`. Only the authenticated employee's own photo is changed. Valid JPEG, PNG, or WebP images up to 5 MB are accepted.
+
+### Reset employee password (administrator)
+
+`POST /api/employees/:id/reset-password`
+
+```json
+{ "newPassword": "temporary-password" }
+```
+
+Administrator-only. The new password must contain at least 8 characters. All persisted sessions for the target employee are invalidated, and the employee must sign in again.
 
 ### Get profile photo
 
@@ -281,6 +315,7 @@ The existing email controllers intentionally retain their established resource-s
 
 - `GET /api/employees/me` was added in this API-freeze update. It is registered before the admin-only employee routes and uses the authenticated account ID from `req.user`.
 - No generic `GET /api/employees/:id` profile endpoint is exposed. Admins can use the employee list; individual profile updates remain available through `PATCH /:id/profile`.
-- Login rate limiting is in-memory and resets when the Node process restarts. It is suitable for the current single-process deployment, not a multi-instance deployment.
+- Login rate limiting applies only to `POST /api/auth/login`, is in-memory, and resets when the Node process restarts. It is suitable for the current single-process deployment, not a multi-instance deployment.
+- Attachment files are SHA-256 hashed. When identical content already exists in `data/attachments`, the new email attachment record reuses the existing storage filename. Existing attachment hashes are backfilled during startup maintenance.
 - HTTPS is not enabled by this release. Set `COOKIE_SECURE=true` only when serving the app over HTTPS.
 - Backup and recovery are explicitly deferred to the next rollout.

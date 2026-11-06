@@ -4,7 +4,7 @@ A self-hosted internal email communication platform designed for organizations t
 
 The application provides user authentication, employee management, internal email communication, recipient management, attachments, drafts, message organization and session management.
 
-> **Development Status:** Backend implementation and verification completed. Frontend development is the next phase.
+> **Development Status:** Core backend and React frontend are implemented. Enhancement Release 1 adds self-service password and profile-photo management plus content-based attachment deduplication; runtime verification is in progress.
 
 ---
 
@@ -232,7 +232,7 @@ The `data/` directory contains persistent application data and must be preserved
 
 ## Implemented Features
 
-The backend functionality has been implemented and verified through API testing.
+The established application workflows have been verified through API testing. Enhancement Release 1 changes are currently undergoing focused regression verification.
 
 ### 1. Authentication and User Management
 
@@ -244,11 +244,15 @@ The backend functionality has been implemented and verified through API testing.
 - Persistent session storage using SQLite.
 - Session regeneration during authentication.
 - Session destruction during logout.
+- Self-service password changes after current-password verification.
+- Administrator-controlled employee password resets for forgotten passwords.
+- Invalidation of all persisted sessions after a password change or reset.
 - HTTP-only session cookies.
 - Authentication middleware.
 - Role-based authorization for ADMIN and EMPLOYEE accounts.
 - Active-account validation.
-- Login rate limiting.
+- Login rate limiting (login endpoint only).
+- Self-service profile-photo upload for the authenticated employee.
 
 ### 2. Email Management
 
@@ -293,12 +297,14 @@ Drafts are stored separately from sent messages using the email status field.
 - Download attachments with access-control validation.
 - Restrict access to authorized senders and recipients.
 - Clean up uploaded files when validation or database operations fail.
+- SHA-256 content hashing to reuse an existing physical file when identical content is attached to another email.
+- Multiple attachment metadata records can reference the same stored file.
 
 Current upload restrictions:
 
 - Maximum file size: 30 MB per file.
 - Maximum number of files: 5 per request.
-- Supported extensions: PDF, JPG, JPEG, PNG, GIF and WEBP.
+- Supported extensions: PDF, TXT, CSV, DOCX, XLSX, PPTX, JPG, JPEG, PNG, GIF, WEBP and ZIP.
 
 ### 6. Read/Unread Management
 
@@ -328,6 +334,7 @@ Deleting a message from one employee's mailbox does not delete it from other emp
 - Parameterized SQL queries.
 - Transactional message creation and recipient assignment.
 - Indexed inbox, sent-message and attachment lookups.
+- Attachment content-hash index and migration-based backfill for previously stored files.
 - Consistent UTC timestamps.
 
 ### 9. Maintenance and Error Handling
@@ -335,6 +342,7 @@ Deleting a message from one employee's mailbox does not delete it from other emp
 - Centralized JSON error handling.
 - JSON responses for unknown API endpoints.
 - Automatic expired-session cleanup.
+- Startup backfill of SHA-256 hashes for existing attachment files.
 - Automatic expired-Trash cleanup.
 - Startup maintenance execution.
 - Scheduled maintenance during server operation.
@@ -396,11 +404,15 @@ Current security measures include:
 - Persistent SQLite session storage.
 - Session regeneration after login.
 - Session destruction during logout.
+- Self-service password changes after current-password verification.
+- Administrator-controlled employee password resets for forgotten passwords.
+- Invalidation of all persisted sessions after a password change or reset.
 - HTTP-only session cookies.
 - Configurable cookie security.
 - Role-based authorization.
 - Active-account checks.
-- Login rate limiting.
+- Login rate limiting (login endpoint only).
+- Self-service profile-photo upload for the authenticated employee.
 - Parameterized SQL queries.
 - SQLite foreign-key enforcement.
 - Attachment signature validation.
@@ -615,7 +627,8 @@ Postman has been used to verify the backend independently of the frontend.
 - Logout and session destruction.
 - Unauthorized access rejection.
 - Role-based authorization.
-- Login rate limiting.
+- Login rate limiting (login endpoint only).
+- Self-service profile-photo upload for the authenticated employee.
 
 ### Email Workflows
 
@@ -824,13 +837,12 @@ The backend MVP is implemented, but the complete application is not yet finished
 
 Current limitations include:
 
-- Frontend interfaces are pending development.
+- Automated end-to-end frontend testing remains pending.
 - The application supports internal communication between registered employees, not external email providers.
 - SMTP integration and external email delivery are outside the current scope.
 - HTTPS has been deferred for the current development environment.
 - Login rate limiting uses in-memory storage and resets when the server restarts.
 - The current deployment is intended for a single application server.
-- Automated end-to-end frontend testing remains pending.
 
 ---
 
@@ -840,7 +852,7 @@ License information will be added once the project licensing decision has been f
 
 ---
 
-**Project Status:** Backend Complete — Frontend Development Pending.
+**Project Status:** Full-stack MVP implemented — enhancement and release-readiness verification in progress.
 
 Built as a practical exploration of backend engineering, relational database design, authentication, session management, REST API development, file handling and full-stack application architecture.
 
@@ -893,9 +905,11 @@ Until configured, the portal links remain visibly present but inactive. No tempo
 - Compose and send with To, Cc, Bcc employee IDs and up to five attachments
 - Save, edit, and delete drafts
 - Reply, reply-all, and forward workflows
-- Administrator employee list, account creation, and account activation/deactivation
-
-Designations and profile photos are not stored in the backend. The current profile uses initials and the account role as a display label until company-provided profile data is available.
+- Administrator employee list, account creation, profile editing, account activation/deactivation, and password reset
+- Employee self-service profile-photo updates
+- Employee self-service password changes with session invalidation
+- Forgot-password guidance directing employees to contact an administrator
+- Sender profile photos in opened email details
 
 ### Recipient input
 

@@ -444,7 +444,9 @@ export function getEmailByIdService({ emailId, userId }) {
       e.sent_at,
 
       sender.name AS sender_name,
-      sender.email AS sender_email
+      sender.email AS sender_email,
+      CASE WHEN sender.profile_photo IS NULL THEN NULL
+           ELSE '/api/employees/' || sender.id || '/photo' END AS sender_profile_photo_url
 
     FROM emails e
 
@@ -558,6 +560,7 @@ export function getEmailByIdService({ emailId, userId }) {
       id: email.sender_id,
       name: email.sender_name,
       email: email.sender_email,
+      profile_photo_url: email.sender_profile_photo_url,
     },
 
     recipients: recipientGroups,

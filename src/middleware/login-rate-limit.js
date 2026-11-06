@@ -2,6 +2,9 @@ const attemptsByIp = new Map();
 
 export function createLoginRateLimiter({ windowMs, maxAttempts }) {
   return function loginRateLimiter(req, res, next) {
+    // This limiter protects credential guessing, not authenticated account actions.
+    if (req.method !== "POST" || req.path !== "/login") return next();
+
     const now = Date.now();
     const key = req.ip || req.socket.remoteAddress || "unknown";
     let record = attemptsByIp.get(key);

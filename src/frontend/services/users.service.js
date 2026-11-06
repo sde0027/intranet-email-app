@@ -18,3 +18,15 @@ export const updateEmployeeProfile = (id, data) => {
   if (data.profile_photo) body.append("profile_photo", data.profile_photo);
   return apiRequest(`/employees/${id}/profile`, { method: "PATCH", body });
 };
+
+export const updateMyProfilePhoto = (file) => {
+  const body = new FormData();
+  body.append("profile_photo", file);
+  return apiRequest("/employees/me/photo", { method: "PUT", body });
+};
+
+export const resetEmployeePassword = (id, newPassword) =>
+  apiRequest(`/employees/${id}/reset-password`, {
+    method: "POST",
+    body: jsonBody({ newPassword }),
+  });

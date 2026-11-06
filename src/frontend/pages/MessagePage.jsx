@@ -94,11 +94,17 @@ export default function MessagePage() {
             {email.subject || "(No subject)"}
           </h1>
           <div className="flex flex-wrap items-start gap-3 border-b border-slate-100 pb-6">
-            <Avatar
-              name={email.sender?.name || "?"}
-              photo={email.sender?.profile_photo_url}
-              size="lg"
-            />
+            <a
+              href={email.sender?.profile_photo_url || undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Avatar
+                name={email.sender?.name || "?"}
+                photo={email.sender?.profile_photo_url}
+                size="lg"
+              />
+            </a>
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-[16px] text-slate-800">
                 {email.sender?.name}

@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { Camera, Pencil, Power, Search, UserPlus, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  Camera,
+  KeyRound,
+  Pencil,
+  Power,
+  Search,
+  UserPlus,
+  X,
+} from "lucide-react";
 import * as users from "../services/users.service.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
@@ -29,7 +38,8 @@ const inputProtection = {
 };
 
 export default function EmployeesPage() {
-  const { user, setUser } = useAuth();
+  const { user, setUser, signOut } = useAuth();
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
@@ -48,7 +58,11 @@ export default function EmployeesPage() {
     }),
     [photoPreview, setPhotoPreview] = useState(""),
     [pendingDeactivation, setPendingDeactivation] = useState(null),
-    [statusBusy, setStatusBusy] = useState(false);
+    [statusBusy, setStatusBusy] = useState(false),
+    [resetTarget, setResetTarget] = useState(null),
+    [resetPassword, setResetPassword] = useState(""),
+    [resetPasswordConfirm, setResetPasswordConfirm] = useState(""),
+    [resetBusy, setResetBusy] = useState(false);
   async function load() {
     setLoading(true);
     try {
@@ -181,6 +195,50 @@ export default function EmployeesPage() {
       setStatusBusy(false);
     }
   }
+  function openPasswordReset(employee) {
+    setResetTarget(employee);
+    setResetPassword("");
+    setResetPasswordConfirm("");
+    setError("");
+  }
+  function closePasswordReset() {
+    if (resetBusy) return;
+    setResetTarget(null);
+    setResetPassword("");
+    setResetPasswordConfirm("");
+  }
+  async function submitPasswordReset(event) {
+    event.preventDefault();
+    if (!resetTarget) return;
+    if (resetPassword.length < 8) {
+      setError("Temporary password must contain at least 8 characters.");
+      return;
+    }
+    if (resetPassword !== resetPasswordConfirm) {
+      setError("Password and confirmation do not match.");
+      return;
+    }
+    setResetBusy(true);
+    setError("");
+    try {
+      await users.resetEmployeePassword(resetTarget.id, resetPassword);
+      const wasCurrentUser = Number(user?.id) === Number(resetTarget.id);
+      setResetTarget(null);
+      setResetPassword("");
+      setResetPasswordConfirm("");
+      setSuccess(
+        `${resetTarget.name}'s password was reset. They must sign in again.`,
+      );
+      if (wasCurrentUser) {
+        await signOut().catch(() => {});
+        navigate("/", { replace: true });
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setResetBusy(false);
+    }
+  }
   const visible = employees.filter((employee) =>
     `${employee.employee_code} ${employee.name} ${employee.email} ${employee.role} ${employee.designation || ""}`
       .toLowerCase()
@@ -200,7 +258,7 @@ export default function EmployeesPage() {
           </Button>
         }
       />
-      {error && !editing && (
+      {error && !editing && !resetTarget && (
         <div className="mb-4">
           <Alert>{error}</Alert>
         </div>
@@ -333,17 +391,18 @@ export default function EmployeesPage() {
         <LoadingState>Loading employees…</LoadingState>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-line/80 bg-white shadow-[0_4px_20px_rgba(25,55,85,.045)]">
-          <div className="hidden grid-cols-[minmax(220px,1fr)_100px_100px_130px_130px] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-[10px] font-bold uppercase tracking-[.12em] text-slate-400 lg:grid">
+          <div className="hidden grid-cols-[minmax(220px,1fr)_100px_100px_130px_150px_130px] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-[10px] font-bold uppercase tracking-[.12em] text-slate-400 lg:grid">
             <span>Employee</span>
             <span>Role</span>
             <span>Status</span>
             <span>Profile</span>
+            <span>Password</span>
             <span>Access</span>
           </div>
           {visible.map((employee) => (
             <div
               key={employee.id}
-              className="grid gap-3 border-b border-slate-100 px-4 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center lg:grid-cols-[minmax(220px,1fr)_100px_100px_130px_130px] lg:gap-4 lg:px-5"
+              className="grid gap-3 border-b border-slate-100 px-4 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center lg:grid-cols-[minmax(220px,1fr)_100px_100px_130px_150px_130px] lg:gap-4 lg:px-5"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <Avatar
@@ -381,6 +440,13 @@ export default function EmployeesPage() {
                 onClick={() => openEditor(employee)}
               >
                 <Pencil size={8} /> Edit profile
+              </Button>
+              <Button
+                variant="secondary"
+                className="min-h-10 px-3 text-[15px]"
+                onClick={() => openPasswordReset(employee)}
+              >
+                <KeyRound size={14} /> Reset
               </Button>
               <Button
                 variant="danger"
@@ -551,6 +617,78 @@ export default function EmployeesPage() {
                 </Button>
                 <Button disabled={busy}>
                   {busy ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4 backdrop-blur-sm">
+          <section
+            className="w-full max-w-md rounded-2xl border border-white/70 bg-white p-6 shadow-[0_24px_80px_rgba(10,30,50,.24)]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-password-title"
+          >
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div>
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-[.15em] text-company/65">
+                  Administrator action
+                </p>
+                <h2
+                  id="reset-password-title"
+                  className="text-lg font-semibold text-company-dark"
+                >
+                  Reset employee password
+                </h2>
+                <p className="mt-1 text-xs text-muted">
+                  Set a temporary password for {resetTarget.name}. Their
+                  existing sessions will be invalidated.
+                </p>
+              </div>
+              <IconButton
+                type="button"
+                onClick={closePasswordReset}
+                disabled={resetBusy}
+                aria-label="Close password reset"
+              >
+                <X size={18} />
+              </IconButton>
+            </div>
+            <form onSubmit={submitPasswordReset} className="grid gap-3">
+              <Field label="New temporary password">
+                <TextInput
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Confirm temporary password">
+                <TextInput
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  value={resetPasswordConfirm}
+                  onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                  required
+                />
+              </Field>
+              {error && <Alert>{error}</Alert>}
+              <div className="mt-3 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={closePasswordReset}
+                  disabled={resetBusy}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={resetBusy}>
+                  {resetBusy ? "Resetting…" : "Reset password"}
                 </Button>
               </div>
             </form>

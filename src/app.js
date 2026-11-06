@@ -8,6 +8,7 @@ import session from "express-session";
 import { SQLiteSessionStore, SESSION_TTL_MS } from "./middleware/sqlite-session-store.js";
 import { cleanupExpiredTrashService } from "./modules/emails/emails.service.js";
 import { cleanupOrphanedProfilePhotos } from "./modules/users/users.service.js";
+import { backfillAttachmentContentHashes } from "./modules/attachments/attachments.service.js";
 
 // Route imports
 import authRoutes from "./modules/auth/auth.routes.js";
@@ -73,7 +74,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api", notFoundHandler);
 app.use(errorHandler);
 
-function runMaintenance() {
+async function runMaintenance() {
   // Clean expired sessions.
   try {
     sessionStore.clearExpired();
@@ -91,6 +92,16 @@ function runMaintenance() {
     console.error("Profile photo cleanup failed:", error.message);
   }
 
+  // Backfill hashes for attachment records created before deduplication was enabled.
+  try {
+    const updatedCount = await backfillAttachmentContentHashes();
+    if (updatedCount > 0) {
+      console.log(`Attachment hash migration completed: ${updatedCount} records updated.`);
+    }
+  } catch (error) {
+    console.error("Attachment hash backfill failed:", error.message);
+  }
+
   // Permanently remove recipient associations for expired Trash items.
   try {
     const deletedCount = cleanupExpiredTrashService();
@@ -105,7 +116,9 @@ function runMaintenance() {
   }
 }
 
-const cleanupTimer = setInterval(runMaintenance, 60 * 60 * 1000);
+const cleanupTimer = setInterval(() => {
+  runMaintenance().catch((error) => console.error("Maintenance task failed:", error));
+}, 60 * 60 * 1000);
 
 cleanupTimer.unref();
 

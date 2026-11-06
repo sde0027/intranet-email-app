@@ -8,7 +8,7 @@ await import("./database/migrate.js");
 
 const { default: app, runMaintenance } = await import("./app.js");
 
-runMaintenance();
+await runMaintenance();
 
 const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`Server running on port ${config.port}`);

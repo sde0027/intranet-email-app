@@ -1,3 +1,4 @@
+import { resetUserPassword } from "../auth/auth.service.js";
 import {
   createEmployee,
   getAllEmployees,
@@ -71,5 +72,56 @@ export function getEmployeePhotoController(req, res, next) {
   } catch (error) {
     if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
     next(error);
+  }
+}
+
+
+export async function resetEmployeePasswordController(req, res, next) {
+  try {
+    const employeeId = Number(req.params.id);
+    if (!Number.isSafeInteger(employeeId) || employeeId <= 0) {
+      return res.status(400).json({ error: "Invalid employee ID." });
+    }
+
+    const result = await resetUserPassword({
+      userId: employeeId,
+      newPassword: req.body?.newPassword,
+    });
+
+    if (employeeId === req.user.id) {
+      res.clearCookie("intranet.sid", { path: "/" });
+    }
+
+    return res.status(200).json({
+      message: "Employee password reset successfully. They must sign in again.",
+      ...result,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    return next(error);
+  }
+}
+
+export function updateMyProfilePhotoController(req, res, next) {
+  try {
+    if (!req.profilePhoto) {
+      return res.status(400).json({ error: "A profile photo is required." });
+    }
+
+    const employee = updateEmployeeProfile({
+      id: req.user.id,
+      input: {},
+      photo: req.profilePhoto,
+    });
+
+    return res.status(200).json({
+      message: "Profile photo updated successfully.",
+      employee,
+    });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    return next(error);
   }
 }

@@ -1,4 +1,4 @@
-import { login } from "./auth.service.js";
+import { login, changeUserPassword } from "./auth.service.js";
 import { db } from "../../database/connection.js";
 import { SESSION_TTL_MS } from "../../middleware/sqlite-session-store.js";
 
@@ -77,4 +77,26 @@ export function logoutController(req, res, next) {
       message: "Logout successful.",
     });
   });
+}
+
+
+export async function changePasswordController(req, res, next) {
+  try {
+    const result = await changeUserPassword({
+      userId: req.user.id,
+      currentPassword: req.body?.currentPassword,
+      newPassword: req.body?.newPassword,
+    });
+
+    res.clearCookie("intranet.sid", { path: "/" });
+    return res.status(200).json({
+      message: "Password changed successfully. Please sign in again.",
+      ...result,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    return next(error);
+  }
 }
